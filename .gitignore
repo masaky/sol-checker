@@ -1,0 +1,19 @@
+node_modules/
+dist/
+*.js.map
+*.d.ts
+!src/**/*.d.ts
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+
+# Config (contains API keys)
+# ~/.sol-checker/config.toml is user-local, not in repo
