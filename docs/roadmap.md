@@ -20,15 +20,15 @@
 
 ---
 
-## Phase 1: CLI スケルトン (Day 2)
+## Phase 1: CLI スケルトン (Day 2) ✅
 
 **目標**: コマンドラインインターフェースの骨格
 
-- [ ] `commander.js` で `scan`, `init`, `--help` コマンド登録 (`src/index.ts`)
-- [ ] `src/config.ts` — `~/.sol-checker/config.toml` の読み書き
-- [ ] `sol-checker init` で設定ファイルを生成
-- [ ] CLI オプション: `--provider`, `--model`, `--output`
-- [ ] 引数バリデーション + エラーメッセージ
+- [x] `commander.js` で `scan`, `init`, `--help` コマンド登録 (`src/index.ts`)
+- [x] `src/config.ts` — `~/.sol-checker/config.toml` の読み書き
+- [x] `sol-checker init` で設定ファイルを生成
+- [x] CLI オプション: `--provider`, `--model`, `--output`
+- [x] 引数バリデーション + エラーメッセージ
 
 **完了基準**: `sol-checker scan foo.sol` でファイル名が表示される、`sol-checker init` で config.toml が生成される
 
