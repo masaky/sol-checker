@@ -1,0 +1,27 @@
+{
+  "name": "sol-checker",
+  "version": "0.1.0",
+  "description": "Solidity smart contract vulnerability checker powered by LLM",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "solidity",
+    "security",
+    "audit",
+    "llm",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
