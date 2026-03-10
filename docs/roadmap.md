@@ -48,16 +48,16 @@
 
 ---
 
-## Phase 3: LLM Provider — Claude (Day 4–5)
+## Phase 3: LLM Provider — Claude (Day 4–5) ✅
 
 **目標**: Anthropic API を叩いて構造化レスポンスを得る
 
-- [ ] `src/providers/base.ts` — LLM プロバイダー共通インターフェース定義
-- [ ] `src/providers/claude.ts` — `@anthropic-ai/sdk` を使った実装
-- [ ] JSON Schema で構造化出力を強制（severity, line, description, impact, fix）
-- [ ] API キーの読み込み（config.toml or 環境変数）
-- [ ] エラーハンドリング（API エラー, レートリミット, タイムアウト）
-- [ ] LLM レスポンスのバリデーション
+- [x] `src/providers/base.ts` — LLM プロバイダー共通インターフェース定義
+- [x] `src/providers/claude.ts` — `@anthropic-ai/sdk` を使った実装
+- [x] `src/providers/validate.ts` — 構造化出力バリデーション（severity, line, description, impact, fix）
+- [x] API キーの読み込み（config.toml or 環境変数 `ANTHROPIC_API_KEY`）
+- [x] エラーハンドリング（API エラー, レートリミット, タイムアウト）
+- [x] LLM レスポンスのバリデーション
 
 **完了基準**: 実際の `.sol` ファイルを渡して、構造化 JSON が返ってくる
 
