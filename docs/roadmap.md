@@ -34,15 +34,15 @@
 
 ---
 
-## Phase 2: File Reader + Prompt Builder (Day 3)
+## Phase 2: File Reader + Prompt Builder (Day 3) ✅
 
 **目標**: `.sol` ファイルを読み込み、LLM に渡すプロンプトを組み立てる
 
-- [ ] `src/scanner.ts` — `.sol` ファイル読み込み + 存在チェック
-- [ ] `prompts/checker-system.md` — セキュリティ専門家システムプロンプト作成
-- [ ] `src/prompt.ts` — システムプロンプト + ソースコード注入 → 最終プロンプト構築
-- [ ] `test/fixtures/vulnerable.sol` — テスト用脆弱コントラクト作成
-- [ ] `test/scanner.test.ts` — ファイル読み込み + プロンプト構築のユニットテスト
+- [x] `src/scanner.ts` — `.sol` ファイル読み込み + 存在チェック
+- [x] `prompts/checker-system.md` — セキュリティ専門家システムプロンプト作成
+- [x] `src/prompt.ts` — システムプロンプト + ソースコード注入 → 最終プロンプト構築
+- [x] `test/fixtures/vulnerable.sol` — テスト用脆弱コントラクト作成
+- [x] `test/scanner.test.ts` — ファイル読み込み + プロンプト構築のユニットテスト
 
 **完了基準**: `vitest` でプロンプト構築テストが通る
 
