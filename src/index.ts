@@ -74,7 +74,8 @@ program
                 console.error(chalk.red(`LLM Error [${err.code}]: ${err.message}`));
                 process.exit(1);
             }
-            console.error(chalk.red(`Unexpected error: ${(err as Error).message}`));
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(chalk.red(`Unexpected error: ${msg}`));
             process.exit(1);
         }
     });
