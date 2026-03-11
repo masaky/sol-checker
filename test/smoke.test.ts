@@ -49,8 +49,8 @@ describe("CLI", () => {
         try {
             const output = run("scan", tmpSol);
             expect(output).toContain("sol-checker");
-            // Without API key, should show an auth error
-            expect(output).toContain("Error");
+            // Without API key, should show a provider error
+            expect(output).toContain("LLM Error [");
         } finally {
             fs.unlinkSync(tmpSol);
         }
