@@ -2,6 +2,11 @@ import { Command } from "commander";
 import chalk from "chalk";
 import fs from "node:fs";
 import { initConfig, loadConfig } from "./config.js";
+import { readSolFile, ScannerError } from "./scanner.js";
+import { buildPrompt } from "./prompt.js";
+import { ClaudeProvider, resolveApiKey } from "./providers/claude.js";
+import { ProviderError } from "./providers/base.js";
+import { formatTerminal, formatMarkdown } from "./reporter.js";
 
 // ---------------------------------------------------------------------------
 // CLI Definition
@@ -25,34 +30,53 @@ program
     .option("-p, --provider <provider>", "LLM provider (claude, openai)", "claude")
     .option("-m, --model <model>", "LLM model name")
     .option("-o, --output <path>", "Output report file path")
-    .action((file: string, options: { provider: string; model?: string; output?: string }) => {
-        // Validate file extension
-        if (!file.endsWith(".sol")) {
-            console.error(chalk.red("Error: File must have a .sol extension"));
+    .action(async (file: string, options: { provider: string; model?: string; output?: string }) => {
+        try {
+            // 1. Read file
+            const target = readSolFile(file);
+
+            // 2. Load config
+            const config = loadConfig();
+            const provider = options.provider ?? config.llm.provider;
+            const model = options.model ?? config.llm.model;
+
+            console.log(chalk.bold("🔍 sol-checker v0.1.0"));
+            console.log();
+            console.log(`  File:     ${chalk.cyan(file)}`);
+            console.log(`  Provider: ${chalk.cyan(provider)}`);
+            console.log(`  Model:    ${chalk.cyan(model)}`);
+            console.log();
+            console.log(chalk.gray("Scanning..."));
+
+            // 3. Build prompt
+            const prompt = buildPrompt(target);
+
+            // 4. Call LLM
+            const apiKey = resolveApiKey(config.llm.api_key);
+            const llm = new ClaudeProvider(apiKey, model);
+            const result = await llm.scan(prompt.system, prompt.user);
+
+            // 5. Terminal output
+            console.log();
+            console.log(formatTerminal(result, file));
+
+            // 6. File output (if --output)
+            if (options.output) {
+                fs.writeFileSync(options.output, formatMarkdown(result, file), "utf-8");
+                console.log(chalk.green(`✔ Report saved to ${options.output}`));
+            }
+        } catch (err) {
+            if (err instanceof ScannerError) {
+                console.error(chalk.red(`Error: ${err.message}`));
+                process.exit(1);
+            }
+            if (err instanceof ProviderError) {
+                console.error(chalk.red(`LLM Error [${err.code}]: ${err.message}`));
+                process.exit(1);
+            }
+            console.error(chalk.red(`Unexpected error: ${(err as Error).message}`));
             process.exit(1);
         }
-
-        // Check file existence
-        if (!fs.existsSync(file)) {
-            console.error(chalk.red(`Error: File not found: ${file}`));
-            process.exit(1);
-        }
-
-        // Load config (CLI options override config values)
-        const config = loadConfig();
-        const provider = options.provider ?? config.llm.provider;
-        const model = options.model ?? config.llm.model;
-
-        console.log(chalk.bold("🔍 sol-checker v0.1.0"));
-        console.log();
-        console.log(`  File:     ${chalk.cyan(file)}`);
-        console.log(`  Provider: ${chalk.cyan(provider)}`);
-        console.log(`  Model:    ${chalk.cyan(model)}`);
-        if (options.output) {
-            console.log(`  Output:   ${chalk.cyan(options.output)}`);
-        }
-        console.log();
-        console.log(chalk.yellow("⚠ Scan not yet implemented. Coming in Phase 3."));
     });
 
 // ---------------------------------------------------------------------------
