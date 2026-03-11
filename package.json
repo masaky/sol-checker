@@ -4,11 +4,21 @@
   "description": "Solidity smart contract vulnerability checker powered by LLM",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "sol-checker": "./dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "prompts/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs'); const f='dist/index.js'; const c=fs.readFileSync(f,'utf8'); if(!c.startsWith('#!'))fs.writeFileSync(f,'#!/usr/bin/env node\\n'+c)\"",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
     "solidity",
