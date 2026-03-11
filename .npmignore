@@ -1,0 +1,21 @@
+# Source (dist/ is published instead)
+src/
+test/
+docs/
+scripts/
+
+# Config
+tsconfig.json
+vitest.config.*
+.github/
+.gitignore
+.claude*
+.npmignore
+
+# Reports (generated)
+docs/reports/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
