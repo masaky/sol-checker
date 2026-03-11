@@ -70,3 +70,49 @@ export function formatTerminal(result: ScanResult, filePath: string): string {
     return lines.join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// formatMarkdown
+// ---------------------------------------------------------------------------
+
+export function formatMarkdown(result: ScanResult, filePath: string): string {
+    const lines: string[] = [];
+    const date = new Date().toISOString().split("T")[0];
+
+    lines.push("# Sol-Checker Report");
+    lines.push(`**File:** ${filePath}`);
+    lines.push(`**Date:** ${date}`);
+    lines.push(`**Provider:** ${result.provider} (${result.model})`);
+    lines.push("");
+
+    if (result.findings.length === 0) {
+        lines.push("No vulnerabilities found.");
+        return lines.join("\n");
+    }
+
+    // Summary table
+    const counts = countBySeverity(result.findings);
+    lines.push("## Summary");
+    lines.push("| Severity | Count |");
+    lines.push("|----------|-------|");
+    for (const sev of SEVERITY_ORDER) {
+        if (counts[sev] > 0) {
+            lines.push(`| ${sev} | ${counts[sev]} |`);
+        }
+    }
+    lines.push("");
+
+    // Findings
+    lines.push("## Findings");
+    lines.push("");
+
+    for (const f of sortFindings(result.findings)) {
+        lines.push(`### [${f.severity}] ${f.title}`);
+        if (f.line !== null) lines.push(`**Line:** ${f.line}`);
+        lines.push(`**Description:** ${f.description}`);
+        lines.push(`**Impact:** ${f.impact}`);
+        lines.push(`**Fix:** ${f.fix}`);
+        lines.push("");
+    }
+
+    return lines.join("\n");
+}

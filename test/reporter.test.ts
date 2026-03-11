@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatTerminal } from "../src/reporter.js";
+import { formatTerminal, formatMarkdown } from "../src/reporter.js";
 import type { ScanResult } from "../src/providers/base.js";
 
 // ---------------------------------------------------------------------------
@@ -85,6 +85,7 @@ describe("formatTerminal", () => {
     });
 
     it("omits line when null", () => {
+        // RESULT_WITH_FINDINGS includes a LOW finding with line: null
         const output = formatTerminal(RESULT_WITH_FINDINGS, FILE_PATH);
         expect(output).not.toContain("Line: null");
     });
@@ -99,5 +100,50 @@ describe("formatTerminal", () => {
         const highIdx = output.indexOf("Reentrancy");
         const infoIdx = output.indexOf("Floating pragma");
         expect(highIdx).toBeLessThan(infoIdx);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// formatMarkdown
+// ---------------------------------------------------------------------------
+
+describe("formatMarkdown", () => {
+    it("includes markdown header with file and provider", () => {
+        const output = formatMarkdown(RESULT_WITH_FINDINGS, FILE_PATH);
+        expect(output).toContain("# Sol-Checker Report");
+        expect(output).toContain("src/MyToken.sol");
+        expect(output).toContain("claude");
+    });
+
+    it("includes summary table", () => {
+        const output = formatMarkdown(RESULT_WITH_FINDINGS, FILE_PATH);
+        expect(output).toContain("| Severity | Count |");
+        expect(output).toContain("| HIGH");
+    });
+
+    it("includes finding sections with severity in heading", () => {
+        const output = formatMarkdown(RESULT_WITH_FINDINGS, FILE_PATH);
+        expect(output).toContain("### [HIGH] Reentrancy in withdraw()");
+        expect(output).toContain("### [MEDIUM] tx.origin usage");
+    });
+
+    it("includes line number in finding", () => {
+        const output = formatMarkdown(RESULT_WITH_FINDINGS, FILE_PATH);
+        expect(output).toContain("**Line:** 42");
+    });
+
+    it("omits line field when null", () => {
+        const output = formatMarkdown(RESULT_WITH_FINDINGS, FILE_PATH);
+        expect(output).not.toContain("**Line:** null");
+    });
+
+    it("shows no-vulnerabilities message when findings is empty", () => {
+        const output = formatMarkdown(RESULT_NO_FINDINGS, FILE_PATH);
+        expect(output).toContain("No vulnerabilities found");
+    });
+
+    it("includes date", () => {
+        const output = formatMarkdown(RESULT_WITH_FINDINGS, FILE_PATH);
+        expect(output).toMatch(/\d{4}-\d{2}-\d{2}/);
     });
 });
