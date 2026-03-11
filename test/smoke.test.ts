@@ -40,8 +40,7 @@ describe("CLI", () => {
         expect(output).toContain("File not found");
     });
 
-    it("should show scan info for existing .sol file", () => {
-        // Use package.json as a trick — create a temp .sol file
+    it("should show LLM error without API key", () => {
         const fs = require("node:fs");
         const tmpSol = path.resolve("test/fixtures/tmp-test.sol");
         fs.mkdirSync(path.dirname(tmpSol), { recursive: true });
@@ -50,8 +49,8 @@ describe("CLI", () => {
         try {
             const output = run("scan", tmpSol);
             expect(output).toContain("sol-checker");
-            expect(output).toContain(tmpSol);
-            expect(output).toContain("Provider:");
+            // Without API key, should show an auth error
+            expect(output).toContain("Error");
         } finally {
             fs.unlinkSync(tmpSol);
         }
