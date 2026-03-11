@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import ora from "ora";
 import fs from "node:fs";
 import { initConfig, loadConfig } from "./config.js";
 import { readSolFile, ScannerError } from "./scanner.js";
@@ -31,6 +32,7 @@ program
     .option("-m, --model <model>", "LLM model name")
     .option("-o, --output <path>", "Output report file path")
     .action(async (file: string, options: { provider: string; model?: string; output?: string }) => {
+        let spinner: ReturnType<typeof ora> | undefined;
         try {
             // 1. Read file
             const target = readSolFile(file);
@@ -46,17 +48,30 @@ program
             console.log(`  Provider: ${chalk.cyan(provider)}`);
             console.log(`  Model:    ${chalk.cyan(model)}`);
             console.log();
-            console.log(chalk.gray("Scanning..."));
 
-            // 3. Build prompt
+            // 3. Check API key before calling LLM
+            const apiKey = resolveApiKey(config.llm.api_key);
+            if (!apiKey) {
+                console.error(chalk.red("Error: No API key configured."));
+                console.error();
+                console.error("  Set your Anthropic API key using one of:");
+                console.error(chalk.gray("    1. export ANTHROPIC_API_KEY=\"sk-ant-...\""));
+                console.error(chalk.gray("    2. sol-checker init  → edit ~/.sol-checker/config.toml"));
+                console.error();
+                console.error(chalk.gray("  Get your key at: https://console.anthropic.com/settings/keys"));
+                process.exit(1);
+            }
+
+            // 4. Build prompt
             const prompt = buildPrompt(target);
 
-            // 4. Call LLM
-            const apiKey = resolveApiKey(config.llm.api_key);
+            // 5. Call LLM with spinner
+            const spinner = ora("Scanning for vulnerabilities...").start();
             const llm = new ClaudeProvider(apiKey, model);
             const result = await llm.scan(prompt.system, prompt.user);
+            spinner.succeed(`Scan complete — ${result.findings.length} finding(s)`);
 
-            // 5. Terminal output
+            // 6. Terminal output
             console.log();
             console.log(formatTerminal(result, file));
 
@@ -71,9 +86,11 @@ program
                 process.exit(1);
             }
             if (err instanceof ProviderError) {
+                spinner?.fail("Scan failed");
                 console.error(chalk.red(`LLM Error [${err.code}]: ${err.message}`));
                 process.exit(1);
             }
+            spinner?.fail("Scan failed");
             const msg = err instanceof Error ? err.message : String(err);
             console.error(chalk.red(`Unexpected error: ${msg}`));
             process.exit(1);
