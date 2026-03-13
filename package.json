@@ -27,7 +27,11 @@
     "llm",
     "cli"
   ],
-  "author": "",
+  "author": "Masaki TSUDA",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/masaky/sol-checker.git"
+  },
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^25.3.5",
