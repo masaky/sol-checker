@@ -21,3 +21,9 @@ docs/reports/ShadowChain-report.md
 
 # Config (contains API keys)
 # ~/.sol-checker/config.toml is user-local, not in repo
+
+# Internal / private docs
+docs/strats/
+docs/roadmap-internal.md
+docs/daily-ops.md
+docs/images/
