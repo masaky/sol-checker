@@ -15,6 +15,9 @@ vitest.config.*
 # Reports (generated)
 docs/reports/
 
+# Internal prompts (not needed by users)
+prompts/git_commit.md
+
 # IDE / OS
 .vscode/
 .idea/

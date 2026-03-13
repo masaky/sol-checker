@@ -66,7 +66,7 @@ program
             const prompt = buildPrompt(target);
 
             // 5. Call LLM with spinner
-            const spinner = ora("Scanning for vulnerabilities...").start();
+            spinner = ora("Scanning for vulnerabilities...").start();
             const llm = new ClaudeProvider(apiKey, model);
             const result = await llm.scan(prompt.system, prompt.user);
             spinner.succeed(`Scan complete — ${result.findings.length} finding(s)`);
@@ -75,7 +75,7 @@ program
             console.log();
             console.log(formatTerminal(result, file));
 
-            // 6. File output (if --output)
+            // 7. File output (if --output)
             if (options.output) {
                 fs.writeFileSync(options.output, formatMarkdown(result, file), "utf-8");
                 console.log(chalk.green(`✔ Report saved to ${options.output}`));
