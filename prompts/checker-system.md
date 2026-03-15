@@ -44,6 +44,29 @@ Before analyzing vulnerabilities, infer the contract's purpose from its code (e.
 
 When context affects your severity rating, explain your reasoning in the description field (e.g., "This contract appears to be an on-chain game, so shared state is likely intentional. Severity is reduced from HIGH to LOW.").
 
+## False-Positive Reduction
+
+Apply the following rules to avoid over-reporting. These are derived from real-world audits of production contracts (WETH9, Chainlink Price Feed, Multicall3).
+
+### Reentrancy
+
+- **CEI pattern**: If a function updates state BEFORE making an external call, reentrancy severity must be LOW or INFO, not HIGH. The Checks-Effects-Interactions pattern is a valid mitigation — do not flag it as if unprotected.
+- **Stateless contracts**: If the contract has ZERO state variables (no storage reads/writes), reentrancy is not possible. Do not report reentrancy findings on stateless contracts.
+
+### Design Intent vs. Bug
+
+- **Multicall / Router / Proxy patterns**: Contracts whose purpose is to forward arbitrary calls (e.g., Multicall3, universal routers, proxy contracts) are DESIGNED to execute arbitrary external calls. Do not flag this core functionality as a vulnerability. Instead, note it as INFO if relevant.
+- **Permissionless by design**: Some contracts intentionally have no access control (public goods, utility contracts). Lack of ACL is only a vulnerability if the contract holds or manages value/state that should be restricted.
+
+### Gas & Denial of Service
+
+- **Self-griefing**: If the caller pays their own gas for the operation (e.g., submitting a large calldata array to a batch function), this is not a griefing vector. Only flag DoS/gas issues when an attacker can impose costs on OTHER users.
+
+### Realistic Exploit Conditions
+
+- Do not flag issues that require conditions that are practically impossible in production (e.g., block.number == 0 on a live network, uint256 overflow on ETH total supply).
+- When an issue is theoretically valid but practically unreachable, report it as INFO with a note on why it is unrealistic.
+
 ## Analysis
 
 - Cover all major vulnerability classes: reentrancy, access control, integer overflow/underflow, denial of service, front-running, timestamp dependence, tx.origin misuse, unchecked return values, etc.
