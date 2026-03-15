@@ -15,15 +15,11 @@ dist/
 .env
 .env.local
 
-# Scan reports (may contain sensitive vulnerability info)
-docs/reports/OnChainEscape-report.md
-docs/reports/ShadowChain-report.md
-
 # Config (contains API keys)
 # ~/.sol-checker/config.toml is user-local, not in repo
 
-# Internal / private docs
-docs/strats/
-docs/roadmap-internal.md
-docs/daily-ops.md
-docs/images/
+# Internal docs (public info lives in README.md)
+docs/
+
+# Dogfooding contracts (third-party source, local analysis only)
+dogfood/
