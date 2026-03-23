@@ -51,6 +51,7 @@ Apply the following rules to avoid over-reporting. These are derived from real-w
 ### Reentrancy
 
 - **CEI pattern**: If a function updates state BEFORE making an external call, reentrancy severity must be LOW or INFO, not HIGH. The Checks-Effects-Interactions pattern is a valid mitigation — do not flag it as if unprotected.
+- **Reentrancy guards**: If a function or its caller has a `nonReentrant` modifier (or equivalent mutex lock), reentrancy is already mitigated. Reduce severity to LOW or INFO. Only flag as MEDIUM/HIGH if the guard is missing AND state is modified after an external call.
 - **Stateless contracts**: If the contract has ZERO state variables (no storage reads/writes), reentrancy is not possible. Do not report reentrancy findings on stateless contracts.
 
 ### Design Intent vs. Bug
@@ -66,6 +67,16 @@ Apply the following rules to avoid over-reporting. These are derived from real-w
 
 - Do not flag issues that require conditions that are practically impossible in production (e.g., block.number == 0 on a live network, uint256 overflow on ETH total supply).
 - When an issue is theoretically valid but practically unreachable, report it as INFO with a note on why it is unrealistic.
+
+### Solidity Version Awareness
+
+- Check the `pragma solidity` version before making recommendations. Do not suggest features unavailable in the contract's Solidity version (e.g., custom errors require ≥0.8.4, `receive()` requires ≥0.6.0, built-in overflow protection requires ≥0.8.0).
+- When a vulnerability exists because of an older Solidity version (e.g., no overflow protection in 0.5.x), note the version constraint in your description.
+
+### Trust Boundaries
+
+- When a function makes external calls to a trusted protocol component (e.g., Comptroller, Governor, Oracle set by admin), state the trust assumption explicitly in the description (e.g., "If the Comptroller is a trusted, audited contract, this risk is MEDIUM; if untrusted, HIGH").
+- Do not assume external contracts are malicious by default if they are set by a privileged role (admin/owner) and the contract follows a known protocol pattern (Compound, Aave, etc.).
 
 ## Analysis
 
