@@ -11,15 +11,27 @@ dist/
 .vscode/
 .idea/
 
+# Claude Code (may contain API keys in settings.local.json)
+.claude/
+
 # Environment
 .env
 .env.local
+
+# Shell recording (script command output)
+typescript
+
+# Logs
+*.log
 
 # Config (contains API keys)
 # ~/.sol-checker/config.toml is user-local, not in repo
 
 # Internal docs (public info lives in README.md)
 docs/
+
+# Internal prompts (not for public consumption)
+prompts/git_commit.md
 
 # Dogfooding contracts (third-party source, local analysis only)
 dogfood/
