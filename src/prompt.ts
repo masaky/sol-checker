@@ -58,13 +58,21 @@ export function buildPrompt(
 ): BuiltPrompt {
     const system = loadSystemPrompt(promptsDir);
 
+    // Add line numbers to help LLM report accurate line references
+    const numberedSource = target.source
+        .split("\n")
+        .map((line, i) => `${i + 1}: ${line}`)
+        .join("\n");
+
     const user = [
         `Analyze the following Solidity smart contract for security vulnerabilities.`,
         ``,
         `File: ${path.basename(target.filePath)}`,
         ``,
+        `Each line is prefixed with its line number (e.g. "42: ..."). Use these exact numbers in your "line" field.`,
+        ``,
         "```solidity",
-        target.source,
+        numberedSource,
         "```",
     ].join("\n");
 

@@ -73,6 +73,11 @@ Apply the following rules to avoid over-reporting. These are derived from real-w
 - Check the `pragma solidity` version before making recommendations. Do not suggest features unavailable in the contract's Solidity version (e.g., custom errors require ≥0.8.4, `receive()` requires ≥0.6.0, built-in overflow protection requires ≥0.8.0).
 - When a vulnerability exists because of an older Solidity version (e.g., no overflow protection in 0.5.x), note the version constraint in your description.
 
+### Revert-Based Gas Estimation
+
+- Some contracts use a pattern where a function executes a transaction and then ALWAYS reverts to measure gas usage (e.g., `requiredTxGas`). Because the function unconditionally reverts, all state changes are rolled back — this is safe by design.
+- Do NOT report "state modification" or "side effects" on functions that always end with `revert(...)`. The revert guarantees atomicity.
+
 ### Trust Boundaries
 
 - When a function makes external calls to a trusted protocol component (e.g., Comptroller, Governor, Oracle set by admin), state the trust assumption explicitly in the description (e.g., "If the Comptroller is a trusted, audited contract, this risk is MEDIUM; if untrusted, HIGH").
