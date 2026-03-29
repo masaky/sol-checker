@@ -164,10 +164,10 @@ export async function verifyByLLM(
     // Call LLM
     const systemPrompt = loadVerifierPrompt(options.promptsDir);
     const userPrompt = buildVerifyUserPrompt(numberedSource, toVerify);
-    const result = await provider.scan(systemPrompt, userPrompt);
+    const rawResponse = await provider.rawCall(systemPrompt, userPrompt);
 
     // Parse and apply verdicts
-    const verdicts = parseVerifyResponse(result.rawResponse);
+    const verdicts = parseVerifyResponse(rawResponse);
     const verdictMap = new Map(verdicts.map((v) => [v.finding_title, v]));
 
     const verified = toVerify.map((f) => {

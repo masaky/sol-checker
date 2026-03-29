@@ -37,6 +37,13 @@ export interface LLMProvider {
      * Send the system + user prompt to the LLM and return structured findings.
      */
     scan(system: string, user: string): Promise<ScanResult>;
+
+    /**
+     * Send the system + user prompt to the LLM and return the raw text response
+     * without any validation or parsing. Useful for non-Finding responses
+     * (e.g. verification verdicts).
+     */
+    rawCall(system: string, user: string): Promise<string>;
 }
 
 // ---------------------------------------------------------------------------

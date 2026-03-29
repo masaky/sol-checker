@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { applyVerdict, parseVerifyResponse } from "../../src/verifiers/llm.js";
+import path from "node:path";
+import { applyVerdict, parseVerifyResponse, verifyByLLM } from "../../src/verifiers/llm.js";
 import type { VerifiedFinding } from "../../src/providers/base.js";
 
 // ---------------------------------------------------------------------------
@@ -102,5 +103,69 @@ describe("applyVerdict", () => {
         expect(result.severity).toBe("INFO");
         expect(result.originalSeverity).toBe("HIGH");
         expect(result.verifyNote).toContain("Contract is stateless");
+    });
+});
+
+// ---------------------------------------------------------------------------
+// verifyByLLM
+// ---------------------------------------------------------------------------
+
+describe("verifyByLLM", () => {
+    it("applies verdicts from LLM response", async () => {
+        const mockProvider = {
+            name: "mock",
+            model: "mock-model",
+            scan: vi.fn(),
+            rawCall: vi.fn().mockResolvedValue(JSON.stringify([{
+                finding_title: "Test Finding",
+                verdict: "rejected",
+                reason: "Not feasible",
+            }])),
+        };
+
+        const findings: VerifiedFinding[] = [{
+            severity: "HIGH",
+            title: "Test Finding",
+            line: 10,
+            description: "desc",
+            impact: "impact",
+            fix: "fix",
+            verified: true,
+        }];
+
+        const result = await verifyByLLM(findings, "1: code", mockProvider, {
+            promptsDir: path.resolve(__dirname, "../../prompts"),
+        });
+
+        expect(result[0].verified).toBe(false);
+        expect(result[0].severity).toBe("INFO");
+        expect(mockProvider.rawCall).toHaveBeenCalled();
+        expect(mockProvider.scan).not.toHaveBeenCalled();
+    });
+
+    it("returns findings unchanged when all are already unverified", async () => {
+        const mockProvider = {
+            name: "mock",
+            model: "mock-model",
+            scan: vi.fn(),
+            rawCall: vi.fn(),
+        };
+
+        const findings: VerifiedFinding[] = [{
+            severity: "HIGH",
+            title: "Test",
+            line: 10,
+            description: "desc",
+            impact: "impact",
+            fix: "fix",
+            verified: false,
+        }];
+
+        const result = await verifyByLLM(findings, "1: code", mockProvider, {
+            promptsDir: path.resolve(__dirname, "../../prompts"),
+        });
+
+        expect(result[0].verified).toBe(false);
+        expect(mockProvider.rawCall).not.toHaveBeenCalled();
     });
 });

@@ -31,9 +31,11 @@ export class ClaudeProvider implements LLMProvider {
         this.client = new Anthropic({ apiKey });
     }
 
-    async scan(system: string, user: string): Promise<ScanResult> {
-        let rawResponse: string;
-
+    /**
+     * Send system + user prompt to the Anthropic API and return raw text.
+     * Shared implementation used by both scan() and rawCall().
+     */
+    private async callApi(system: string, user: string): Promise<string> {
         try {
             const message = await this.client.messages.create({
                 model: this.model,
@@ -50,7 +52,7 @@ export class ClaudeProvider implements LLMProvider {
                     "INVALID_RESPONSE"
                 );
             }
-            rawResponse = textBlock.text;
+            return textBlock.text;
         } catch (err) {
             // Re-throw ProviderErrors as-is
             if (err instanceof ProviderError) throw err;
@@ -90,6 +92,10 @@ export class ClaudeProvider implements LLMProvider {
                 err
             );
         }
+    }
+
+    async scan(system: string, user: string): Promise<ScanResult> {
+        const rawResponse = await this.callApi(system, user);
 
         // Validate and parse the JSON response
         const findings = validateFindings(rawResponse);
@@ -100,6 +106,10 @@ export class ClaudeProvider implements LLMProvider {
             model: this.model,
             provider: this.name,
         };
+    }
+
+    async rawCall(system: string, user: string): Promise<string> {
+        return this.callApi(system, user);
     }
 }
 

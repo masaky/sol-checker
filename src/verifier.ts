@@ -38,15 +38,18 @@ export async function verify(
 
     // Stage 2: LLM verification (if provider given and not skipped)
     if (!skipLLM && options.llmProvider) {
-        // Build numbered source for the LLM prompt
         const numberedSource = sourceLines
             .map((line, i) => `${i + 1}: ${line}`)
             .join("\n");
 
-        verified = await verifyByLLM(verified, numberedSource, options.llmProvider, {
-            skipInfo: options.skipInfo,
-            promptsDir: options.promptsDir,
-        });
+        try {
+            verified = await verifyByLLM(verified, numberedSource, options.llmProvider, {
+                skipInfo: options.skipInfo,
+                promptsDir: options.promptsDir,
+            });
+        } catch {
+            // Stage 2 failed — return Stage 1 results only
+        }
     }
 
     return verified;

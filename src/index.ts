@@ -7,6 +7,7 @@ import { readSolFile, ScannerError } from "./scanner.js";
 import { buildPrompt } from "./prompt.js";
 import { ClaudeProvider, resolveApiKey } from "./providers/claude.js";
 import { ProviderError } from "./providers/base.js";
+import type { VerifiedFinding } from "./providers/base.js";
 import { formatTerminal, formatMarkdown } from "./reporter.js";
 import { verify } from "./verifier.js";
 
@@ -98,10 +99,9 @@ program
             }
 
             const verifiedResult = { ...result, findings: verifiedFindings };
-            const verifiedCount = verifiedFindings.filter(
-                (f) => !("verified" in f) || (f as any).verified,
+            const unverifiedCount = verifiedFindings.filter(
+                (f) => "verified" in f && !(f as VerifiedFinding).verified,
             ).length;
-            const unverifiedCount = verifiedFindings.length - verifiedCount;
 
             if (unverifiedCount > 0) {
                 spinner.succeed(

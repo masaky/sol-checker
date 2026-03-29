@@ -266,6 +266,22 @@ describe("ClaudeProvider.scan (mocked)", () => {
         }
     });
 
+    it("throws INVALID_RESPONSE when LLM returns no text content", async () => {
+        const provider = new ClaudeProvider("sk-test");
+        vi.spyOn(provider["client"].messages, "create").mockResolvedValue({
+            content: [],
+            id: "msg_test",
+            model: "claude-sonnet-4-20250514",
+            role: "assistant",
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            type: "message",
+            usage: { input_tokens: 10, output_tokens: 0 },
+        } as never);
+
+        await expect(provider.scan("sys", "usr")).rejects.toThrow(ProviderError);
+    });
+
     it("throws INVALID_RESPONSE when LLM returns bad JSON", async () => {
         const provider = new ClaudeProvider("sk-test");
         vi.spyOn(provider["client"].messages, "create").mockResolvedValue({
@@ -280,5 +296,56 @@ describe("ClaudeProvider.scan (mocked)", () => {
         } as never);
 
         await expect(provider.scan("sys", "usr")).rejects.toThrow(ProviderError);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ClaudeProvider.rawCall — mocked
+// ---------------------------------------------------------------------------
+
+describe("ClaudeProvider.rawCall (mocked)", () => {
+    it("returns raw text without validation", async () => {
+        const provider = new ClaudeProvider("sk-test");
+        vi.spyOn(provider["client"].messages, "create").mockResolvedValue({
+            content: [{ type: "text", text: "raw response text" }],
+            id: "msg_test",
+            model: "claude-sonnet-4-20250514",
+            role: "assistant",
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            type: "message",
+            usage: { input_tokens: 100, output_tokens: 50 },
+        } as never);
+
+        const result = await provider.rawCall("system", "user");
+        expect(result).toBe("raw response text");
+    });
+
+    it("does not throw on non-JSON response", async () => {
+        const provider = new ClaudeProvider("sk-test");
+        vi.spyOn(provider["client"].messages, "create").mockResolvedValue({
+            content: [{ type: "text", text: "This is not JSON at all." }],
+            id: "msg_test",
+            model: "claude-sonnet-4-20250514",
+            role: "assistant",
+            stop_reason: "end_turn",
+            stop_sequence: null,
+            type: "message",
+            usage: { input_tokens: 10, output_tokens: 5 },
+        } as never);
+
+        // rawCall should NOT validate — just return raw text
+        const result = await provider.rawCall("sys", "usr");
+        expect(result).toBe("This is not JSON at all.");
+    });
+
+    it("throws ProviderError on API failure", async () => {
+        const provider = new ClaudeProvider("sk-test");
+        vi.spyOn(provider["client"].messages, "create").mockRejectedValue({
+            status: 429,
+            message: "Too Many Requests",
+        });
+
+        await expect(provider.rawCall("sys", "usr")).rejects.toThrow(ProviderError);
     });
 });
