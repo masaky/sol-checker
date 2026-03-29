@@ -17,6 +17,12 @@ export interface SolCheckerConfig {
         format: string;
         color: boolean;
     };
+    verify: {
+        enabled: boolean;
+        model: string;
+        skip_info: boolean;
+        line_tolerance: number;
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -33,6 +39,7 @@ export const DEFAULT_CONFIG: SolCheckerConfig = {
         format: "markdown",
         color: true,
     },
+    verify: { enabled: true, model: "", skip_info: true, line_tolerance: 10 },
 };
 
 // ---------------------------------------------------------------------------
@@ -72,6 +79,12 @@ export function loadConfig(homeDir?: string): SolCheckerConfig {
             format: parsed.output?.format ?? DEFAULT_CONFIG.output.format,
             color: parsed.output?.color ?? DEFAULT_CONFIG.output.color,
         },
+        verify: {
+            enabled: parsed.verify?.enabled ?? DEFAULT_CONFIG.verify.enabled,
+            model: parsed.verify?.model ?? DEFAULT_CONFIG.verify.model,
+            skip_info: parsed.verify?.skip_info ?? DEFAULT_CONFIG.verify.skip_info,
+            line_tolerance: parsed.verify?.line_tolerance ?? DEFAULT_CONFIG.verify.line_tolerance,
+        },
     };
 }
 
@@ -88,6 +101,12 @@ model = "${config.llm.model}"
 [output]
 format = "${config.output.format}"
 color = ${config.output.color}
+
+[verify]
+enabled = ${config.verify.enabled}
+model = "${config.verify.model}"
+skip_info = ${config.verify.skip_info}
+line_tolerance = ${config.verify.line_tolerance}
 `;
 }
 

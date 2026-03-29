@@ -98,6 +98,46 @@ provider = "openai"
     });
 
     // -----------------------------------------------------------------------
+    // verify config
+    // -----------------------------------------------------------------------
+
+    describe("verify config", () => {
+        it("returns default verify settings when not configured", () => {
+            const config = loadConfig(tmpDir);
+            expect(config.verify.enabled).toBe(true);
+            expect(config.verify.model).toBe("");
+            expect(config.verify.skip_info).toBe(true);
+            expect(config.verify.line_tolerance).toBe(10);
+        });
+
+        it("loads verify settings from TOML", () => {
+            const tomlContent = `[llm]
+provider = "claude"
+api_key = ""
+model = "claude-sonnet-4-20250514"
+
+[output]
+format = "markdown"
+color = true
+
+[verify]
+enabled = false
+model = "claude-opus-4-20250918"
+skip_info = false
+line_tolerance = 5
+`;
+            const configDir = path.join(tmpDir, ".sol-checker");
+            fs.mkdirSync(configDir, { recursive: true });
+            fs.writeFileSync(path.join(configDir, "config.toml"), tomlContent, "utf-8");
+            const config = loadConfig(tmpDir);
+            expect(config.verify.enabled).toBe(false);
+            expect(config.verify.model).toBe("claude-opus-4-20250918");
+            expect(config.verify.skip_info).toBe(false);
+            expect(config.verify.line_tolerance).toBe(5);
+        });
+    });
+
+    // -----------------------------------------------------------------------
     // initConfig
     // -----------------------------------------------------------------------
 
