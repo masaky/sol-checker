@@ -8,6 +8,7 @@ import { buildPrompt } from "./prompt.js";
 import { ClaudeProvider, resolveApiKey } from "./providers/claude.js";
 import { ProviderError } from "./providers/base.js";
 import { formatTerminal, formatMarkdown } from "./reporter.js";
+import { verify } from "./verifier.js";
 
 // ---------------------------------------------------------------------------
 // CLI Definition
@@ -31,7 +32,15 @@ program
     .option("-p, --provider <provider>", "LLM provider (claude, openai)", "claude")
     .option("-m, --model <model>", "LLM model name")
     .option("-o, --output <path>", "Output report file path")
-    .action(async (file: string, options: { provider: string; model?: string; output?: string }) => {
+    .option("--no-verify", "Skip finding verification")
+    .option("--verify-model <model>", "Model to use for verification")
+    .action(async (file: string, options: {
+        provider: string;
+        model?: string;
+        output?: string;
+        verify?: boolean;
+        verifyModel?: string;
+    }) => {
         let spinner: ReturnType<typeof ora> | undefined;
         try {
             // 1. Read file
@@ -69,15 +78,46 @@ program
             spinner = ora("Scanning for vulnerabilities...").start();
             const llm = new ClaudeProvider(apiKey, model);
             const result = await llm.scan(prompt.system, prompt.user);
-            spinner.succeed(`Scan complete — ${result.findings.length} finding(s)`);
+
+            // 5b. Verify findings
+            const shouldVerify = options.verify !== false && config.verify.enabled;
+            let verifiedFindings = result.findings;
+
+            if (shouldVerify && result.findings.length > 0) {
+                spinner.text = "Verifying findings...";
+                const verifyModel = options.verifyModel ?? (config.verify.model || model);
+                const verifyProvider = new ClaudeProvider(apiKey, verifyModel);
+
+                const verified = await verify(result.findings, target.source, {
+                    enabled: true,
+                    llmProvider: verifyProvider,
+                    skipInfo: config.verify.skip_info,
+                    lineTolerance: config.verify.line_tolerance,
+                });
+                verifiedFindings = verified;
+            }
+
+            const verifiedResult = { ...result, findings: verifiedFindings };
+            const verifiedCount = verifiedFindings.filter(
+                (f) => !("verified" in f) || (f as any).verified,
+            ).length;
+            const unverifiedCount = verifiedFindings.length - verifiedCount;
+
+            if (unverifiedCount > 0) {
+                spinner.succeed(
+                    `Scan complete — ${result.findings.length} finding(s), ${unverifiedCount} unverified`,
+                );
+            } else {
+                spinner.succeed(`Scan complete — ${result.findings.length} finding(s)`);
+            }
 
             // 6. Terminal output
             console.log();
-            console.log(formatTerminal(result, file));
+            console.log(formatTerminal(verifiedResult, file));
 
             // 7. File output (if --output)
             if (options.output) {
-                fs.writeFileSync(options.output, formatMarkdown(result, file), "utf-8");
+                fs.writeFileSync(options.output, formatMarkdown(verifiedResult, file), "utf-8");
                 console.log(chalk.green(`✔ Report saved to ${options.output}`));
             }
         } catch (err) {
