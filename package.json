@@ -9,7 +9,7 @@
   },
   "files": [
     "dist/",
-    "prompts/checker-system.md",
+    "prompts/",
     "README.md",
     "LICENSE"
   ],
