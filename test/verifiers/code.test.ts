@@ -137,6 +137,19 @@ describe("verifyByCode", () => {
         expect(result[0].verifyNote).toContain("modifier");
     });
 
+    it("returns verified true when no function name can be extracted from title", () => {
+        const findings: Finding[] = [{
+            severity: "HIGH",
+            title: "General reentrancy risk",
+            line: 5,
+            description: "desc",
+            impact: "impact",
+            fix: "fix",
+        }];
+        const result = verifyByCode(findings, SOURCE_LINES);
+        expect(result[0].verified).toBe(true);
+    });
+
     it("uses default tolerance of 10 lines", () => {
         const findings: Finding[] = [{
             severity: "LOW",

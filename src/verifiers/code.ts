@@ -77,7 +77,8 @@ function hasModifierOnFunction(
             const signatureWindow = sourceLines
                 .slice(i, Math.min(i + 5, sourceLines.length))
                 .join(" ");
-            if (signatureWindow.includes(modifierName)) {
+            const modRe = new RegExp("\\b" + modifierName + "\\b");
+            if (modRe.test(signatureWindow)) {
                 return true;
             }
         }
@@ -110,8 +111,9 @@ function isFunctionNearLine(
     const start = Math.max(0, line - 1 - tolerance);
     const end = Math.min(sourceLines.length, line - 1 + tolerance + 1);
 
+    const funcRe = new RegExp("\\b" + funcName + "\\b");
     for (let i = start; i < end; i++) {
-        if (sourceLines[i].includes(funcName)) {
+        if (funcRe.test(sourceLines[i])) {
             return true;
         }
     }
