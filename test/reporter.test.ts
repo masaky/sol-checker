@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { formatTerminal, formatMarkdown } from "../src/reporter.js";
-import type { ScanResult } from "../src/providers/base.js";
+import type { ScanResult, VerifiedFinding } from "../src/providers/base.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -145,5 +145,113 @@ describe("formatMarkdown", () => {
     it("includes date", () => {
         const output = formatMarkdown(RESULT_WITH_FINDINGS, FILE_PATH);
         expect(output).toMatch(/\d{4}-\d{2}-\d{2}/);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// VerifiedFinding support
+// ---------------------------------------------------------------------------
+
+describe("formatTerminal with VerifiedFinding", () => {
+    it("shows UNVERIFIED label for unverified findings", () => {
+        const result = {
+            findings: [{
+                severity: "INFO" as const,
+                title: "Fake vulnerability",
+                line: 10,
+                description: "desc",
+                impact: "impact",
+                fix: "fix",
+                verified: false,
+                verifyNote: "Attack scenario not feasible",
+                originalSeverity: "HIGH",
+            }] satisfies VerifiedFinding[],
+            rawResponse: "",
+            model: "test",
+            provider: "test",
+        };
+        const output = formatTerminal(result, "test.sol");
+        expect(output).toContain("UNVERIFIED");
+        expect(output).toContain("Attack scenario not feasible");
+        expect(output).toContain("HIGH");
+    });
+
+    it("shows corrected line number", () => {
+        const result = {
+            findings: [{
+                severity: "LOW" as const,
+                title: "Some issue",
+                line: 39,
+                description: "desc",
+                impact: "impact",
+                fix: "fix",
+                verified: true,
+                verifyNote: "Line corrected: 100→39",
+                originalLine: 100,
+            }] satisfies VerifiedFinding[],
+            rawResponse: "",
+            model: "test",
+            provider: "test",
+        };
+        const output = formatTerminal(result, "test.sol");
+        expect(output).toContain("39");
+        expect(output).toContain("corrected from 100");
+    });
+});
+
+describe("formatMarkdown with VerifiedFinding", () => {
+    it("shows verification columns in summary table", () => {
+        const result = {
+            findings: [
+                {
+                    severity: "LOW" as const,
+                    title: "Real issue",
+                    line: 10,
+                    description: "desc",
+                    impact: "impact",
+                    fix: "fix",
+                    verified: true,
+                },
+                {
+                    severity: "INFO" as const,
+                    title: "Fake issue",
+                    line: 20,
+                    description: "desc",
+                    impact: "impact",
+                    fix: "fix",
+                    verified: false,
+                    originalSeverity: "HIGH",
+                    verifyNote: "Not feasible",
+                },
+            ] satisfies VerifiedFinding[],
+            rawResponse: "",
+            model: "test",
+            provider: "test",
+        };
+        const output = formatMarkdown(result, "test.sol");
+        expect(output).toContain("Verified");
+        expect(output).toContain("Unverified");
+    });
+
+    it("shows strikethrough original severity on rejected finding", () => {
+        const result = {
+            findings: [{
+                severity: "INFO" as const,
+                title: "Rejected finding",
+                line: 10,
+                description: "desc",
+                impact: "impact",
+                fix: "fix",
+                verified: false,
+                originalSeverity: "HIGH",
+                verifyNote: "Impossible attack",
+            }] satisfies VerifiedFinding[],
+            rawResponse: "",
+            model: "test",
+            provider: "test",
+        };
+        const output = formatMarkdown(result, "test.sol");
+        expect(output).toContain("~~[HIGH]~~");
+        expect(output).toContain("UNVERIFIED");
     });
 });

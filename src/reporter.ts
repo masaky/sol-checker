@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import type { ScanResult, Finding, Severity } from "./providers/base.js";
+import type { ScanResult, Finding, Severity, VerifiedFinding } from "./providers/base.js";
 
 // ---------------------------------------------------------------------------
 // Severity helpers
@@ -24,6 +24,27 @@ function countBySeverity(findings: Finding[]): Record<Severity, number> {
     const counts: Record<Severity, number> = { HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
     for (const f of findings) counts[f.severity]++;
     return counts;
+}
+
+function isVerifiedFinding(f: Finding): f is VerifiedFinding {
+    return "verified" in f;
+}
+
+function countByVerification(findings: Finding[]): { verified: number; unverified: number } {
+    let verified = 0;
+    let unverified = 0;
+    for (const f of findings) {
+        if (isVerifiedFinding(f) && !f.verified) {
+            unverified++;
+        } else {
+            verified++;
+        }
+    }
+    return { verified, unverified };
+}
+
+function hasVerificationData(findings: Finding[]): boolean {
+    return findings.some((f) => isVerifiedFinding(f));
 }
 
 // ---------------------------------------------------------------------------
@@ -60,7 +81,24 @@ export function formatTerminal(result: ScanResult, filePath: string): string {
     for (const f of sortFindings(result.findings)) {
         const tag = SEVERITY_COLOR[f.severity](`[${f.severity}]`);
         lines.push(`${tag} ${f.title}`);
-        if (f.line !== null) lines.push(`  Line: ${f.line}`);
+
+        if (isVerifiedFinding(f)) {
+            const vf = f;
+            if (vf.originalLine !== undefined) {
+                lines.push(`  Line: ${vf.line} (corrected from ${vf.originalLine})`);
+            } else if (vf.line !== null) {
+                lines.push(`  Line: ${vf.line}`);
+            }
+            if (!vf.verified) {
+                lines.push(chalk.yellow(`  ⚠ UNVERIFIED — ${vf.verifyNote ?? "Verification failed"}`));
+                if (vf.originalSeverity) {
+                    lines.push(chalk.yellow(`  ⚠ Original severity: ${vf.originalSeverity} → ${vf.severity}`));
+                }
+            }
+        } else {
+            if (f.line !== null) lines.push(`  Line: ${f.line}`);
+        }
+
         lines.push(`  ${f.description}`);
         lines.push(`  Impact: ${f.impact}`);
         lines.push(`  Fix: ${f.fix}`);
@@ -91,12 +129,26 @@ export function formatMarkdown(result: ScanResult, filePath: string): string {
 
     // Summary table
     const counts = countBySeverity(result.findings);
+    const showVerification = hasVerificationData(result.findings);
+
     lines.push("## Summary");
-    lines.push("| Severity | Count |");
-    lines.push("|----------|-------|");
-    for (const sev of SEVERITY_ORDER) {
-        if (counts[sev] > 0) {
-            lines.push(`| ${sev} | ${counts[sev]} |`);
+    if (showVerification) {
+        lines.push("| Severity | Count | Verified | Unverified |");
+        lines.push("|----------|-------|----------|------------|");
+        for (const sev of SEVERITY_ORDER) {
+            if (counts[sev] > 0) {
+                const sevFindings = result.findings.filter((f) => f.severity === sev);
+                const vc = countByVerification(sevFindings);
+                lines.push(`| ${sev} | ${counts[sev]} | ${vc.verified} | ${vc.unverified} |`);
+            }
+        }
+    } else {
+        lines.push("| Severity | Count |");
+        lines.push("|----------|-------|");
+        for (const sev of SEVERITY_ORDER) {
+            if (counts[sev] > 0) {
+                lines.push(`| ${sev} | ${counts[sev]} |`);
+            }
         }
     }
     lines.push("");
@@ -106,8 +158,26 @@ export function formatMarkdown(result: ScanResult, filePath: string): string {
     lines.push("");
 
     for (const f of sortFindings(result.findings)) {
-        lines.push(`### [${f.severity}] ${f.title}`);
-        if (f.line !== null) lines.push(`**Line:** ${f.line}`);
+        if (isVerifiedFinding(f) && !f.verified && f.originalSeverity) {
+            lines.push(`### [${f.severity}] ~~[${f.originalSeverity}]~~ ${f.title}`);
+        } else {
+            lines.push(`### [${f.severity}] ${f.title}`);
+        }
+
+        if (isVerifiedFinding(f)) {
+            const vf = f;
+            if (vf.originalLine !== undefined) {
+                lines.push(`**Line:** ${vf.line} *(corrected from ${vf.originalLine})*`);
+            } else if (vf.line !== null) {
+                lines.push(`**Line:** ${vf.line}`);
+            }
+            if (!vf.verified) {
+                lines.push(`**⚠ UNVERIFIED:** ${vf.verifyNote ?? "Verification failed"}`);
+            }
+        } else {
+            if (f.line !== null) lines.push(`**Line:** ${f.line}`);
+        }
+
         lines.push(`**Description:** ${f.description}`);
         lines.push(`**Impact:** ${f.impact}`);
         lines.push(`**Fix:** ${f.fix}`);
