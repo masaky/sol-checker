@@ -2,6 +2,50 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { validateFindings } from "../src/providers/validate.js";
 import { ClaudeProvider, resolveApiKey } from "../src/providers/claude.js";
 import { ProviderError } from "../src/providers/base.js";
+import type { Finding, Severity, VerifiedFinding } from "../src/providers/base.js";
+
+// ---------------------------------------------------------------------------
+// VerifiedFinding
+// ---------------------------------------------------------------------------
+
+describe("VerifiedFinding", () => {
+    it("extends Finding with verification fields", () => {
+        const base: Finding = {
+            severity: "HIGH",
+            title: "Test",
+            line: 10,
+            description: "desc",
+            impact: "impact",
+            fix: "fix",
+        };
+        const verified: VerifiedFinding = {
+            ...base,
+            verified: true,
+        };
+        expect(verified.verified).toBe(true);
+        expect(verified.verifyNote).toBeUndefined();
+        expect(verified.originalLine).toBeUndefined();
+        expect(verified.originalSeverity).toBeUndefined();
+    });
+
+    it("carries all optional verification metadata", () => {
+        const verified: VerifiedFinding = {
+            severity: "INFO",
+            title: "Downgraded",
+            line: 39,
+            description: "desc",
+            impact: "impact",
+            fix: "fix",
+            verified: false,
+            verifyNote: "Line corrected: 100→39",
+            originalLine: 100,
+            originalSeverity: "HIGH",
+        };
+        expect(verified.verified).toBe(false);
+        expect(verified.originalLine).toBe(100);
+        expect(verified.originalSeverity).toBe("HIGH");
+    });
+});
 
 // ---------------------------------------------------------------------------
 // validateFindings

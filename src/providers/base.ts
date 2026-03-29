@@ -60,3 +60,14 @@ export class ProviderError extends Error {
         this.name = "ProviderError";
     }
 }
+
+// ---------------------------------------------------------------------------
+// Verified Finding (post-verification enrichment)
+// ---------------------------------------------------------------------------
+
+export interface VerifiedFinding extends Finding {
+    verified: boolean;
+    verifyNote?: string;
+    originalLine?: number;
+    originalSeverity?: Severity;
+}
