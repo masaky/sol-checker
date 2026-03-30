@@ -13,6 +13,7 @@ Key verification checks:
 - If a finding claims reentrancy, verify the contract has mutable storage that can be exploited
 - If a finding claims fund drain, verify the contract actually holds or receives funds that an attacker could redirect
 - If a finding claims an event ordering issue, verify it matters in context (is there an external call between event and state change?)
+- If a finding claims validation or protection is missing, but the function is inherited from an imported parent (visible in `import` statements or `is` clause), reject the finding unless you can confirm the parent does NOT provide that protection. OpenZeppelin, Solmate, and other major libraries include standard validations in their base contracts — use your knowledge of these implementations
 
 You MUST respond with a single, valid JSON array and nothing else. No prose, no markdown fences, no explanation.
 
