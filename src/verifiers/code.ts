@@ -1,5 +1,8 @@
 import type { Finding, VerifiedFinding } from "../providers/base.js";
 
+// Declaration types that we can verify line numbers for
+type DeclarationType = "contract" | "interface" | "library" | "abstract contract";
+
 // ---------------------------------------------------------------------------
 // Function name extraction
 // ---------------------------------------------------------------------------
@@ -39,6 +42,91 @@ export function extractFunctionName(title: string, description?: string): string
         }
     }
     return null;
+}
+
+// ---------------------------------------------------------------------------
+// Declaration name extraction (contract / interface / library)
+// ---------------------------------------------------------------------------
+
+const DECLARATION_KEYWORDS: DeclarationType[] = [
+    "abstract contract", "contract", "interface", "library",
+];
+
+/**
+ * Extract a Solidity contract, interface, or library name from a finding
+ * title or description. Used as a fallback when no function name is found.
+ */
+export function extractDeclarationName(
+    title: string,
+    description?: string,
+): { type: DeclarationType; name: string } | null {
+    // Search description first — it typically contains more specific references
+    // (e.g. "The Permit2 contract") vs generic titles ("Empty Contract Implementation")
+    for (const text of [description, title]) {
+        if (!text) continue;
+        for (const keyword of DECLARATION_KEYWORDS) {
+            // Build a case-insensitive pattern for the keyword itself
+            const kwPattern = keyword
+                .split("")
+                .map((ch) =>
+                    /[a-zA-Z]/.test(ch)
+                        ? `[${ch.toLowerCase()}${ch.toUpperCase()}]`
+                        : ch === " " ? "\\s+" : ch,
+                )
+                .join("");
+
+            // Pattern 1: "<keyword> <Name>" (Solidity declaration order)
+            // Name must be PascalCase (uppercase first letter)
+            const declRe = new RegExp(
+                `\\b${kwPattern}\\s+([A-Z][a-zA-Z0-9_]*)\\b`,
+            );
+            const declMatch = text.match(declRe);
+            if (declMatch) {
+                return { type: keyword, name: declMatch[1] };
+            }
+            // Pattern 2: "<Name> <keyword>" (natural language order)
+            const nlRe = new RegExp(
+                `\\b([A-Z][a-zA-Z0-9_]*)\\s+${kwPattern}\\b`,
+            );
+            const nlMatch = text.match(nlRe);
+            if (nlMatch) {
+                return { type: keyword, name: nlMatch[1] };
+            }
+        }
+    }
+    return null;
+}
+
+function findDeclarationLine(
+    sourceLines: string[],
+    name: string,
+): number | null {
+    const re = new RegExp(
+        `\\b(?:abstract\\s+)?(?:contract|interface|library)\\s+${name}\\b`,
+    );
+    for (let i = 0; i < sourceLines.length; i++) {
+        if (re.test(sourceLines[i])) {
+            return i + 1; // 1-based
+        }
+    }
+    return null;
+}
+
+function isDeclarationNearLine(
+    sourceLines: string[],
+    name: string,
+    line: number,
+    tolerance: number,
+): boolean {
+    const start = Math.max(0, line - 1 - tolerance);
+    const end = Math.min(sourceLines.length, line - 1 + tolerance + 1);
+    const re = new RegExp(`\\b${name}\\b`);
+    for (let i = start; i < end; i++) {
+        if (re.test(sourceLines[i])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,8 +248,8 @@ export function verifyByCode(
 
         if (funcName) {
             // Check 2: find function declaration and validate reported line
-            const declLine = findFunctionLine(sourceLines, funcName);
-            if (declLine === null) {
+            const funcDeclLine = findFunctionLine(sourceLines, funcName);
+            if (funcDeclLine === null) {
                 // Function name not found anywhere — check if it appears
                 // as a reference (not a declaration) near the reported line
                 if (!isFunctionNearLine(sourceLines, funcName, f.line, tolerance)) {
@@ -170,11 +258,11 @@ export function verifyByCode(
                         `Function "${funcName}" not found near line ${f.line} or elsewhere in file`;
                     return result;
                 }
-            } else if (declLine !== f.line) {
+            } else if (funcDeclLine !== f.line) {
                 // Function exists but at a different line — correct it
                 result.originalLine = f.line;
-                result.line = declLine;
-                result.verifyNote = `Line corrected: ${f.line}\u2192${declLine}`;
+                result.line = funcDeclLine;
+                result.verifyNote = `Line corrected: ${f.line}\u2192${funcDeclLine}`;
             }
 
             // Check 3: false-positive modifier claims
@@ -194,6 +282,24 @@ export function verifyByCode(
                     result.verifyNote =
                         `Claimed missing modifier "${claimedMissing}" actually exists on ${funcName}`;
                     return result;
+                }
+            }
+        } else {
+            // Fallback: check for contract/interface/library declarations
+            const decl = extractDeclarationName(f.title, f.description);
+            if (decl) {
+                const declLine = findDeclarationLine(sourceLines, decl.name);
+                if (declLine === null) {
+                    if (!isDeclarationNearLine(sourceLines, decl.name, f.line, tolerance)) {
+                        result.verified = false;
+                        result.verifyNote =
+                            `Declaration "${decl.name}" not found near line ${f.line} or elsewhere in file`;
+                        return result;
+                    }
+                } else if (declLine !== f.line) {
+                    result.originalLine = f.line;
+                    result.line = declLine;
+                    result.verifyNote = `Line corrected: ${f.line}\u2192${declLine}`;
                 }
             }
         }

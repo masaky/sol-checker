@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { verifyByCode, extractFunctionName } from "../../src/verifiers/code.js";
+import { verifyByCode, extractFunctionName, extractDeclarationName } from "../../src/verifiers/code.js";
 import type { Finding } from "../../src/providers/base.js";
 
 // ---------------------------------------------------------------------------
@@ -164,5 +164,117 @@ describe("verifyByCode", () => {
         expect(result[0].verified).toBe(true);
         expect(result[0].line).toBe(12);
         expect(result[0].originalLine).toBe(3);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// extractDeclarationName
+// ---------------------------------------------------------------------------
+
+describe("extractDeclarationName", () => {
+    it("extracts contract name from description (Solidity order)", () => {
+        const result = extractDeclarationName(
+            "Empty Implementation",
+            "The Permit2 contract is empty",
+        );
+        expect(result).toEqual({ type: "contract", name: "Permit2" });
+    });
+
+    it("extracts contract name from title (natural language order)", () => {
+        const result = extractDeclarationName("Permit2 contract is empty");
+        expect(result).toEqual({ type: "contract", name: "Permit2" });
+    });
+
+    it("extracts interface name", () => {
+        const result = extractDeclarationName(
+            "Missing methods",
+            "interface IERC20 does not implement all methods",
+        );
+        expect(result).toEqual({ type: "interface", name: "IERC20" });
+    });
+
+    it("extracts library name", () => {
+        const result = extractDeclarationName(
+            "SafeMath library overflow",
+        );
+        expect(result).toEqual({ type: "library", name: "SafeMath" });
+    });
+
+    it("extracts abstract contract name", () => {
+        const result = extractDeclarationName(
+            "Issue found",
+            "abstract contract Ownable has no constructor",
+        );
+        expect(result).toEqual({ type: "abstract contract", name: "Ownable" });
+    });
+
+    it("returns null when no declaration found", () => {
+        expect(extractDeclarationName("General reentrancy risk")).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// verifyByCode — contract declaration line correction
+// ---------------------------------------------------------------------------
+
+describe("verifyByCode — declaration line correction", () => {
+    const PERMIT2_LINES = [
+        "// SPDX-License-Identifier: MIT",                                  // 1
+        "pragma solidity 0.8.17;",                                           // 2
+        "",                                                                   // 3
+        'import {SignatureTransfer} from "./SignatureTransfer.sol";',        // 4
+        'import {AllowanceTransfer} from "./AllowanceTransfer.sol";',        // 5
+        "",                                                                   // 6
+        "/// @notice Permit2 handles signature-based transfers.",            // 7
+        "/// @dev Users must approve Permit2 before calling.",               // 8
+        "contract Permit2 is SignatureTransfer, AllowanceTransfer {",        // 9
+        "// Permit2 unifies the two contracts.",                             // 10
+        "}",                                                                  // 11
+        "",                                                                   // 12
+    ];
+
+    it("corrects line number for contract declaration", () => {
+        const findings: Finding[] = [{
+            severity: "INFO",
+            title: "Empty Contract Implementation",
+            line: 11,
+            description: "The Permit2 contract is empty and only serves as a unification layer.",
+            impact: "No direct security impact",
+            fix: "Intentional design",
+        }];
+        const result = verifyByCode(findings, PERMIT2_LINES);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(9);
+        expect(result[0].originalLine).toBe(11);
+        expect(result[0].verifyNote).toContain("corrected");
+    });
+
+    it("keeps correct line number unchanged for contract declaration", () => {
+        const findings: Finding[] = [{
+            severity: "INFO",
+            title: "Empty Contract Implementation",
+            line: 9,
+            description: "The Permit2 contract is empty.",
+            impact: "No impact",
+            fix: "Intentional",
+        }];
+        const result = verifyByCode(findings, PERMIT2_LINES);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(9);
+        expect(result[0].originalLine).toBeUndefined();
+    });
+
+    it("flags finding when contract name not found in source", () => {
+        const findings: Finding[] = [{
+            severity: "INFO",
+            title: "Empty Contract Implementation",
+            line: 5,
+            description: "The NonExistent contract is empty.",
+            impact: "No impact",
+            fix: "fix",
+        }];
+        const result = verifyByCode(findings, PERMIT2_LINES);
+        expect(result[0].verified).toBe(false);
+        expect(result[0].verifyNote).toContain("NonExistent");
     });
 });
