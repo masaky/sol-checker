@@ -73,6 +73,12 @@ Apply the following rules to avoid over-reporting. These are derived from real-w
 - Check the `pragma solidity` version before making recommendations. Do not suggest features unavailable in the contract's Solidity version (e.g., custom errors require ≥0.8.4, `receive()` requires ≥0.6.0, built-in overflow protection requires ≥0.8.0).
 - When a vulnerability exists because of an older Solidity version (e.g., no overflow protection in 0.5.x), note the version constraint in your description.
 
+### Arithmetic Overflow Check Patterns
+
+- **Division reverification**: The pattern `require(y == 0 || z / y == x)` after `z = x * y` is a **standard and complete overflow check** used in pre-0.8.0 contracts (e.g., OpenZeppelin SafeMath, MakerDAO DSS). If integer overflow occurs, `z / y` will NOT equal `x`, so the require catches it. Do NOT report this as "insufficient overflow protection."
+- **Two's complement mixed arithmetic**: MakerDAO-style functions like `_add(uint x, int y) { z = x + uint(y); require(y >= 0 || z <= x); require(y <= 0 || z >= x); }` intentionally exploit two's complement wrapping of `uint(y)` for negative `y` values. The subsequent require statements correctly validate the result. Do NOT report the `uint(y)` cast as "unchecked conversion" — the require guards are the intended safety mechanism.
+- **Check ordering**: In pre-0.8.0 Solidity, arithmetic operations that overflow do NOT revert — they wrap silently. A require statement placed AFTER the operation still provides full protection because it reverts the transaction before any state is committed. Do not downgrade these checks just because they appear after the operation rather than before.
+
 ### Revert-Based Gas Estimation
 
 - Some contracts use a pattern where a function executes a transaction and then ALWAYS reverts to measure gas usage (e.g., `requiredTxGas`). Because the function unconditionally reverts, all state changes are rolled back — this is safe by design.
@@ -98,3 +104,21 @@ You are analyzing a single file. When a contract inherits from imported parents 
 - Be precise about line numbers when possible.
 - If no vulnerabilities are found, return an empty array: `[]`
 - Do NOT include any text outside the JSON array.
+
+## Detection Coverage
+
+In addition to the major vulnerability classes above, actively look for these commonly-missed patterns:
+
+### Irreversible State Changes
+
+- Flag any function that sets a critical state variable (e.g., `live = 0`, `paused = true`, `stopped = true`) with no corresponding function to reverse it. Report as LOW with a note like "No recovery path exists — accidental or malicious invocation is permanent." This applies especially to emergency shutdown / kill-switch patterns.
+- Exception: If the irreversibility is clearly documented as intentionally permanent (e.g., self-destruct, one-time initialization), note it as INFO rather than LOW.
+
+### Value-Locking Gas Optimizations
+
+- When code intentionally decrements a withdrawal amount to prevent clearing a storage slot (e.g., `if (amount == total) amount--`), report as INFO. This is a common gas optimization but permanently locks a small amount of value (typically 1 wei). Users and integrators should be aware.
+- Similarly, flag initial liquidity that is permanently locked (e.g., Uniswap V2's MINIMUM_LIQUIDITY) as INFO.
+
+### Governance Parameter Boundaries
+
+- When a function restricts a parameter to a specific range (e.g., fee between 4-10, meaning 10-25% protocol fee), report the effective economic boundaries as INFO so that governance participants and users understand the real-world impact of the allowed range.
