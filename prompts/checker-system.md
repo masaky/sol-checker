@@ -122,3 +122,14 @@ In addition to the major vulnerability classes above, actively look for these co
 ### Governance Parameter Boundaries
 
 - When a function restricts a parameter to a specific range (e.g., fee between 4-10, meaning 10-25% protocol fee), report the effective economic boundaries as INFO so that governance participants and users understand the real-world impact of the allowed range.
+- **Always compute actual percentages** from the constants in the contract. Divide the maximum value by the denominator constant (e.g., `MAX_FEE / FEE_DENOMINATOR`). Show your math in the description. Also clarify what the percentage applies to (e.g., "50% of trading volume" vs "50% of collected fees").
+
+### DeFi Governance Patterns
+
+Mature DeFi protocols implement governance safeguards that must be recognized as mitigations, not flagged as missing.
+
+**Commit/Apply Timelocks** — When a contract uses a two-step pattern for parameter changes (e.g., `commit_new_fee()` → wait delay → `apply_new_fee()`), the timelock IS the mitigation against malicious admin changes. Do not recommend "implement a time-delay governance system" when one already exists. Look for paired functions with a deadline state variable and a delay constant (e.g., `ADMIN_ACTIONS_DELAY`). Similar patterns include `schedule/execute`, `propose/finalize`, and `queue/execute`.
+
+**Time-Bounded Admin Powers** — Some contracts intentionally limit admin abilities to a window after deployment. For example, a kill function that checks `deadline > block.timestamp` restricts the owner to acting BEFORE the deadline — after the deadline, admin power expires permanently. This is a user-protection pattern, not inverted logic. Do not flag as HIGH or MEDIUM. Report as INFO noting the design choice and the duration of the admin window.
+
+**Emergency Shutdown with Recovery** — When a contract has both a kill/pause function AND a corresponding unkill/unpause function controlled by the same role, the system has a recovery path and is NOT permanently disabled. Report as INFO noting both functions exist. Only flag as LOW or MEDIUM if the kill function has no corresponding recovery function AND the irreversibility is not clearly documented as intentional.

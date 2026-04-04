@@ -3,6 +3,9 @@ import type { Finding, VerifiedFinding } from "../providers/base.js";
 // Declaration types that we can verify line numbers for
 type DeclarationType = "contract" | "interface" | "library" | "abstract contract";
 
+// Patterns that declare a named function in supported languages
+const FUNC_DECL_PREFIXES = ["function ", "function\t", "def ", "def\t"] as const;
+
 // ---------------------------------------------------------------------------
 // Function name extraction
 // ---------------------------------------------------------------------------
@@ -157,16 +160,28 @@ function hasModifierOnFunction(
 ): boolean {
     const start = Math.max(0, lineIndex - tolerance);
     const end = Math.min(sourceLines.length, lineIndex + tolerance);
+    const modRe = new RegExp("\\b" + modifierName + "\\b");
 
     for (let i = start; i < end; i++) {
         const line = sourceLines[i];
-        if (line.includes(`function ${funcName}`) || line.includes(`function\t${funcName}`)) {
-            // Check this line and subsequent lines for multi-line signatures
-            const signatureWindow = sourceLines
-                .slice(i, Math.min(i + 5, sourceLines.length))
-                .join(" ");
-            const modRe = new RegExp("\\b" + modifierName + "\\b");
-            if (modRe.test(signatureWindow)) {
+        const isFuncDecl = FUNC_DECL_PREFIXES.some((p) => line.includes(p + funcName));
+        if (!isFuncDecl) continue;
+
+        // Solidity: modifiers appear in the signature (same line or next few lines)
+        const signatureWindow = sourceLines
+            .slice(i, Math.min(i + 5, sourceLines.length))
+            .join(" ");
+        if (modRe.test(signatureWindow)) {
+            return true;
+        }
+
+        // Vyper: decorators like @nonreentrant('lock') appear directly above def.
+        // Walk upward and stop at the first non-decorator line.
+        const decoratorRe = new RegExp("@" + modifierName + "\\b");
+        for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+            const prev = sourceLines[j].trimStart();
+            if (!prev.startsWith("@")) break;
+            if (decoratorRe.test(sourceLines[j])) {
                 return true;
             }
         }
@@ -180,10 +195,7 @@ function hasModifierOnFunction(
 
 function findFunctionLine(sourceLines: string[], funcName: string): number | null {
     for (let i = 0; i < sourceLines.length; i++) {
-        if (
-            sourceLines[i].includes(`function ${funcName}`) ||
-            sourceLines[i].includes(`function\t${funcName}`)
-        ) {
+        if (FUNC_DECL_PREFIXES.some((p) => sourceLines[i].includes(p + funcName))) {
             return i + 1; // 1-based
         }
     }

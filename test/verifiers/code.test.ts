@@ -278,3 +278,100 @@ describe("verifyByCode — declaration line correction", () => {
         expect(result[0].verifyNote).toContain("NonExistent");
     });
 });
+
+// ---------------------------------------------------------------------------
+// verifyByCode — Vyper support
+// ---------------------------------------------------------------------------
+
+const VYPER_SOURCE_LINES = [
+    "# @version 0.2.4",                                    // 1
+    "",                                                      // 2
+    "@view",                                                 // 3
+    "@internal",                                             // 4
+    "def get_D(xp: uint256[3], amp: uint256) -> uint256:",  // 5
+    "    S: uint256 = 0",                                    // 6
+    "    return S",                                           // 7
+    "",                                                      // 8
+    "@external",                                             // 9
+    "@nonreentrant('lock')",                                 // 10
+    "def add_liquidity(amounts: uint256[3], min_mint: uint256):", // 11
+    "    pass",                                              // 12
+    "",                                                      // 13
+    "@external",                                             // 14
+    "def kill_me():",                                        // 15
+    "    assert msg.sender == self.owner",                   // 16
+    "",                                                      // 17
+];
+
+describe("verifyByCode — Vyper function detection", () => {
+    it("finds Vyper function at correct line", () => {
+        const findings: Finding[] = [{
+            severity: "MEDIUM",
+            title: "Division by Zero in get_D",
+            line: 5,
+            description: "get_D divides by zero when balance is zero",
+            impact: "DoS",
+            fix: "Add zero check",
+        }];
+        const result = verifyByCode(findings, VYPER_SOURCE_LINES);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(5);
+    });
+
+    it("corrects line when Vyper function is at a different location", () => {
+        const findings: Finding[] = [{
+            severity: "MEDIUM",
+            title: "Issue in add_liquidity",
+            line: 1,
+            description: "add_liquidity has a bug",
+            impact: "impact",
+            fix: "fix",
+        }];
+        const result = verifyByCode(findings, VYPER_SOURCE_LINES);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(11);
+        expect(result[0].originalLine).toBe(1);
+    });
+
+    it("flags finding when Vyper function not found in source", () => {
+        const findings: Finding[] = [{
+            severity: "HIGH",
+            title: "Bug in nonExistentFunc",
+            line: 5,
+            description: "nonExistentFunc is broken",
+            impact: "impact",
+            fix: "fix",
+        }];
+        const result = verifyByCode(findings, VYPER_SOURCE_LINES);
+        expect(result[0].verified).toBe(false);
+        expect(result[0].verifyNote).toContain("nonExistentFunc");
+    });
+
+    it("detects Vyper decorator as modifier (nonreentrant on add_liquidity)", () => {
+        const findings: Finding[] = [{
+            severity: "HIGH",
+            title: "Reentrancy in add_liquidity",
+            line: 11,
+            description: "add_liquidity lacks the nonreentrant modifier",
+            impact: "Reentrancy attack",
+            fix: "Add nonreentrant",
+        }];
+        const result = verifyByCode(findings, VYPER_SOURCE_LINES);
+        expect(result[0].verified).toBe(false);
+        expect(result[0].verifyNote).toContain("nonreentrant");
+    });
+
+    it("confirms missing modifier when Vyper function has no decorator", () => {
+        const findings: Finding[] = [{
+            severity: "MEDIUM",
+            title: "Missing guard on kill_me",
+            line: 15,
+            description: "kill_me lacks the nonreentrant modifier",
+            impact: "Unprotected",
+            fix: "Add nonreentrant",
+        }];
+        const result = verifyByCode(findings, VYPER_SOURCE_LINES);
+        // kill_me has no @nonreentrant, so this finding should stay verified
+        expect(result[0].verified).toBe(true);
+    });
+});
