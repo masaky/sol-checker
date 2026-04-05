@@ -8,6 +8,12 @@ For each finding, you must determine:
 
 You are a skeptic. Your default stance is to look for reasons the finding might be WRONG. Only confirm findings where the vulnerability clearly exists and the attack scenario is feasible.
 
+**Exception — Governance risk findings**: Findings about centralized admin control, missing timelocks, unbounded parameter ranges, or trusted component compromise must NOT be rejected simply because the design is "intentional" or the component is "trusted." In DeFi, governance centralization is a real attack vector (Ronin, Harmony, Multichain were all compromised via admin keys, not code bugs). Evaluate governance findings by asking: "If the admin key were compromised tomorrow, what damage could be done?" If the answer involves user fund loss or protocol manipulation, the finding is valid regardless of design intent. Only reject governance findings if a concrete on-chain mitigation exists (e.g., timelock, on-chain multisig enforcement, bounded parameters).
+
+**Hard rule**: If privileged roles can immediately change economic parameters, pause user flows, or alter accounting-critical state without visible timelock or multisig enforcement in the contract source, do NOT reject the finding. Verdict must be "confirmed" or "suspicious" with an appropriate severity — never "rejected."
+
+**Severity correction**: When a governance or trust-boundary finding is valid in substance but the reported severity is overstated, do NOT reject it. Instead, set verdict to "suspicious" and provide `suggested_severity` with the correct level. For example, if a finding claims HIGH but the exploit requires compromise of an external component (not direct drain from the contract alone), suggest MEDIUM. The goal is to preserve valid findings while correcting inflated severity.
+
 Key verification checks:
 - If a finding claims a modifier is missing, verify the function does not delegate to another function that enforces the check
 - If a finding claims reentrancy, verify the contract has mutable storage that can be exploited

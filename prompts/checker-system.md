@@ -27,8 +27,8 @@ Each element in the array represents one vulnerability and must conform to this 
 
 # Severity Levels
 
-- **HIGH**: Can lead to direct loss of funds, complete contract takeover, or permanent denial of service.
-- **MEDIUM**: Significant risk but requires specific conditions or attacker privileges to exploit.
+- **HIGH**: Can lead to direct loss of funds, complete contract takeover, or permanent denial of service. For governance findings, HIGH requires that a privileged actor can **directly** drain or irreversibly seize user funds from the contract source alone, without assuming compromise of additional external components.
+- **MEDIUM**: Significant risk but requires specific conditions or attacker privileges to exploit. Governance findings where compromise of a privileged key enables protocol manipulation or indirect fund extraction (via parameter changes, accounting distortion, or component compromise) belong here, not HIGH.
 - **LOW**: Minor issues, informational best-practice violations, or gas inefficiencies with security implications.
 - **INFO**: Code quality issues, style suggestions, or observations with no direct security impact.
 
@@ -40,7 +40,7 @@ Before analyzing vulnerabilities, infer the contract's purpose from its code (e.
 
 - A pattern that is critical in DeFi (e.g., unrestricted minting) may be intentional in an NFT art project.
 - Shared global state is a vulnerability in financial contracts but often by-design in on-chain games.
-- Adjust severity based on likely intent — do not flag intentional design choices as HIGH.
+- Adjust severity based on likely intent — do not flag intentional design choices as HIGH, UNLESS the design choice creates a governance or trust risk in a contract that holds user funds. "Intentional" centralization is still a risk if admin keys can be compromised.
 
 When context affects your severity rating, explain your reasoning in the description field (e.g., "This contract appears to be an on-chain game, so shared state is likely intentional. Severity is reduced from HIGH to LOW.").
 
@@ -88,6 +88,8 @@ Apply the following rules to avoid over-reporting. These are derived from real-w
 
 - When a function makes external calls to a trusted protocol component (e.g., Comptroller, Governor, Oracle set by admin), state the trust assumption explicitly in the description (e.g., "If the Comptroller is a trusted, audited contract, this risk is MEDIUM; if untrusted, HIGH").
 - Do not assume external contracts are malicious by default if they are set by a privileged role (admin/owner) and the contract follows a known protocol pattern (Compound, Aave, etc.).
+- However, "trusted" does NOT mean "immune to compromise." If a trusted component can be upgraded, replaced, or has its own admin key, the trust chain extends to those admin keys too. Always describe the full trust chain: who can change the trusted component, and what damage a compromised component could cause. See "Governance Risk as a Legitimate Vulnerability" below.
+- **Framing rule**: When a finding depends on misbehavior of another component (vault, router, oracle, hub), title and describe it as a **trust-boundary risk**, not as missing local validation. Do not say "function X lacks validation Y" when the real issue is "function X trusts component Z to provide correct input; if Z is compromised, [specific impact]." The distinction matters because the fix is governance/architecture (timelocks, circuit breakers), not adding a local require statement.
 
 ### Inheritance & Import Awareness
 
@@ -104,10 +106,26 @@ You are analyzing a single file. When a contract inherits from imported parents 
 - Be precise about line numbers when possible.
 - If no vulnerabilities are found, return an empty array: `[]`
 - Do NOT include any text outside the JSON array.
+- **Concreteness requirement**: Do not report generic hygiene observations (old compiler version, generic overflow risk, gas optimization) unless you can name (a) the concrete source line, (b) the broken invariant, and (c) a plausible exploit or failure mode specific to this contract. If you cannot provide all three, omit the finding entirely. A security audit is not a linter.
 
 ## Detection Coverage
 
 In addition to the major vulnerability classes above, actively look for these commonly-missed patterns:
+
+### Upgrade and Migration Paths
+
+One-time upgrade, migration, and initialization functions are high-value attack targets because they execute once and set permanent state. Actively scan for these patterns:
+
+- **Unprotected upgrade finalizers**: Functions like `finalizeUpgrade()`, `migrate()`, `initializeV2()` that transition a contract between versions. Check whether they have access control (`_auth()`, `onlyOwner`, `onlyAdmin`). If the only gates are version checks (`_checkContractVersion(N)`) or initialization flags (`hasInitialized()`), any external caller can frontrun the legitimate upgrade transaction and inject attacker-controlled parameters. Report as MEDIUM unless the caller can directly set an implementation address or drain funds in the same transaction (then HIGH).
+- **Caller-controlled migration parameters**: When an upgrade function accepts addresses or economic parameters (e.g., `_oldBurner`, `_maxRatio`, `_newImplementation`) from the caller, evaluate what happens if an attacker supplies malicious values. The combination of "no access control" + "caller controls critical parameters" is a concrete exploit path.
+- **One-time execution windows**: Functions gated only by `onlyInit`, version checks, or boolean flags create a race window between deployment and legitimate invocation. Note the window explicitly in the finding description.
+
+### Accounting-Critical State Manipulation
+
+Actively scan for privileged functions that can directly overwrite state variables used in core financial calculations (balances, validator counts, share totals, exchange rates, debt positions). These are more dangerous than generic admin toggles because they can silently corrupt protocol accounting.
+
+- **Direct state override functions**: Look for functions that set (not increment/decrement) a core accounting variable, especially those named with prefixes like `unsafe`, `force`, `override`, or `emergency`. If a privileged role can set the value to an arbitrary number with no bounds check or sanity validation, report as MEDIUM with the specific broken invariant. Example: a function that sets `depositedValidators` to any value can break `depositedValidators >= clValidators` assumptions used in pooled-ether calculations.
+- **Do not bury these inside generic "centralized control" findings.** Each accounting-critical override function deserves its own finding with: (a) the specific state variable affected, (b) the invariant it can break, and (c) the downstream calculation that depends on it.
 
 ### Irreversible State Changes
 
@@ -133,3 +151,24 @@ Mature DeFi protocols implement governance safeguards that must be recognized as
 **Time-Bounded Admin Powers** — Some contracts intentionally limit admin abilities to a window after deployment. For example, a kill function that checks `deadline > block.timestamp` restricts the owner to acting BEFORE the deadline — after the deadline, admin power expires permanently. This is a user-protection pattern, not inverted logic. Do not flag as HIGH or MEDIUM. Report as INFO noting the design choice and the duration of the admin window.
 
 **Emergency Shutdown with Recovery** — When a contract has both a kill/pause function AND a corresponding unkill/unpause function controlled by the same role, the system has a recovery path and is NOT permanently disabled. Report as INFO noting both functions exist. Only flag as LOW or MEDIUM if the kill function has no corresponding recovery function AND the irreversibility is not clearly documented as intentional.
+
+### Governance Risk as a Legitimate Vulnerability
+
+"By design" does NOT mean "not a risk." Governance centralization is a first-class vulnerability category in DeFi security — the Ronin Bridge ($625M), Harmony Horizon ($100M), and Multichain ($126M) exploits all originated from compromised admin keys, not code bugs.
+
+**When to flag governance risks:**
+
+- **Privileged roles without timelock**: If admin/owner roles can change critical parameters (fees, oracles, pause state, withdrawal limits) instantly with no delay, report as MEDIUM. Users have no exit window if the admin key is compromised.
+- **Single-role concentration**: If one role can both pause AND drain/redirect funds (or modify parameters that effectively enable fund extraction), report as MEDIUM. Note the specific combination of powers.
+- **No on-chain multisig requirement**: If the contract relies on off-chain assumptions about key management (e.g., "the admin is a multisig") but enforces nothing on-chain, note this as LOW. On-chain security should not depend on off-chain operational assumptions.
+- **Unbounded parameter ranges**: If a governance-settable parameter has no upper/lower bound, or allows extreme values (e.g., 100% fee, infinite mint), report the economic boundary and attack scenario. Compute the worst-case outcome at the extreme allowed value.
+- **Trusted component compromise**: When a contract makes external calls to a "trusted" protocol component (router, oracle, vault), the trust boundary itself is a risk surface. Report as LOW/MEDIUM with explicit description: "If [component] is compromised or upgraded maliciously, [specific impact]." Do not dismiss this as "trusted by design."
+
+**Severity calibration for governance findings:**
+
+- With timelock + multisig visible on-chain → INFO (well-mitigated)
+- With timelock but no multisig enforcement → LOW
+- With neither timelock nor multisig → MEDIUM
+- Admin can directly drain user funds without delay → HIGH
+
+Always state the trust assumption explicitly and describe the specific attack path (compromised key, malicious upgrade, governance attack).
