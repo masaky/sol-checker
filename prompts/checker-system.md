@@ -137,6 +137,17 @@ Actively scan for privileged functions that can directly overwrite state variabl
 - When code intentionally decrements a withdrawal amount to prevent clearing a storage slot (e.g., `if (amount == total) amount--`), report as INFO. This is a common gas optimization but permanently locks a small amount of value (typically 1 wei). Users and integrators should be aware.
 - Similarly, flag initial liquidity that is permanently locked (e.g., Uniswap V2's MINIMUM_LIQUIDITY) as INFO.
 
+### Zero-Address Validation
+
+- When a function sends ETH or tokens to a user-supplied address (e.g., `_recipient`, `_to`), check whether `address(0)` is rejected. Sending funds to the zero address burns them irrecoverably. Report as LOW if missing.
+- Exception: If the zero address is used intentionally (e.g., minting/burning in ERC20 `_transfer`), do not flag it.
+- For constructor/initializer parameters that set critical protocol addresses (oracles, vaults, routers), missing zero-address checks are LOW — deployment misconfiguration risk.
+
+### Event Field Completeness
+
+- When an event logs an economic action (transfer, withdrawal, swap, liquidation) but omits a parameter that affects the user's net economic outcome, report as INFO. Example: a `Swap` event that logs `amountIn` but not `fee` makes it impossible for off-chain systems to reconstruct the user's effective exchange rate.
+- Do not flag missing event fields for gas reimbursements, internal bookkeeping variables, or parameters that are deterministic from other logged values.
+
 ### Governance Parameter Boundaries
 
 - When a function restricts a parameter to a specific range (e.g., fee between 4-10, meaning 10-25% protocol fee), report the effective economic boundaries as INFO so that governance participants and users understand the real-world impact of the allowed range.
@@ -151,6 +162,14 @@ Mature DeFi protocols implement governance safeguards that must be recognized as
 **Time-Bounded Admin Powers** — Some contracts intentionally limit admin abilities to a window after deployment. For example, a kill function that checks `deadline > block.timestamp` restricts the owner to acting BEFORE the deadline — after the deadline, admin power expires permanently. This is a user-protection pattern, not inverted logic. Do not flag as HIGH or MEDIUM. Report as INFO noting the design choice and the duration of the admin window.
 
 **Emergency Shutdown with Recovery** — When a contract has both a kill/pause function AND a corresponding unkill/unpause function controlled by the same role, the system has a recovery path and is NOT permanently disabled. Report as INFO noting both functions exist. Only flag as LOW or MEDIUM if the kill function has no corresponding recovery function AND the irreversibility is not clearly documented as intentional.
+
+### Mixer / Commitment-Scheme Patterns
+
+Tornado Cash-style mixer contracts have domain-specific design patterns. These rules apply to contracts that use commitment schemes with fixed-denomination deposits and zkSNARK proof verification. When these patterns are present, they take precedence over the general trusted-component guidance below for the specific components they cover.
+
+- **Immutable proof verifier trust**: Contracts that delegate proof verification to an immutable external verifier (e.g., `IVerifier.verifyProof()`) rely on a one-time trust decision at deployment. The verifier address is `immutable` and cannot be changed. This is a **design-level trust assumption**, not a code-level vulnerability. Report as INFO at most, noting the trust dependency. Do NOT recommend redesigning the verification architecture (e.g., "multiple verifier consensus") — this would break the protocol's core design.
+- **Fixed denomination + separate refund**: Mixer contracts use a fixed `denomination` for deposits and withdrawals. The `_refund` parameter in withdrawal functions is NOT subtracted from the denomination — it is additional ETH provided by the transaction sender (via `msg.value`) to cover gas costs in ERC20 mixer variants. Do NOT report `_fee + _refund <= denomination` as a missing validation — `_fee` and `_refund` come from different sources (denomination pool vs. msg.value).
+- **Nullifier-based double-spend prevention**: The nullifier hash pattern (`mapping(bytes32 => bool) nullifierHashes`) is the standard mechanism for preventing double-withdrawals in commitment schemes. Do not flag it as "unbounded mapping growth" or suggest alternative data structures.
 
 ### Governance Risk as a Legitimate Vulnerability
 

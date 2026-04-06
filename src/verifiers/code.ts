@@ -21,6 +21,15 @@ const SOLIDITY_KEYWORDS = new Set([
     "delete", "new", "revert", "assert", "this", "super", "true", "false",
 ]);
 
+// Words that commonly precede "contract" / "interface" / "library" in
+// natural-language descriptions but are not Solidity declaration names.
+const NATURAL_LANGUAGE_NOISE = new Set([
+    "The", "This", "That", "These", "Those",
+    "Each", "Every", "Any", "Some", "All", "No",
+    "One", "Two", "Most", "Such", "Its",
+    "A", "An",
+]);
+
 /**
  * Extract a Solidity function name from a finding title or description.
  * Looks for camelCase, snake_case, or digit-containing identifiers that
@@ -40,6 +49,11 @@ export function extractFunctionName(title: string, description?: string): string
             // - digit suffix: starts lowercase, contains digit (aggregate3Value)
             const startsLower = /^[a-z]/.test(c);
             if (startsLower && (/[A-Z]/.test(c) || /\d/.test(c) || c.includes("_"))) {
+                // Reject standalone acronyms like "zkSNARK" — words that END
+                // with 4+ consecutive uppercase letters are technical terms, not
+                // function names. Words like "verifyECDSAProof" where lowercase
+                // follows the acronym are legitimate function names and pass.
+                if (/[A-Z]{4,}$/.test(c)) continue;
                 return c;
             }
         }
@@ -92,7 +106,7 @@ export function extractDeclarationName(
                 `\\b([A-Z][a-zA-Z0-9_]*)\\s+${kwPattern}\\b`,
             );
             const nlMatch = text.match(nlRe);
-            if (nlMatch) {
+            if (nlMatch && !NATURAL_LANGUAGE_NOISE.has(nlMatch[1])) {
                 return { type: keyword, name: nlMatch[1] };
             }
         }

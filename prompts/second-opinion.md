@@ -41,3 +41,10 @@ Focus on: governance risks, trust boundary assumptions, privilege escalation pat
 
 Output a structured assessment with clear verdicts per finding.
 Do not assume any prior conclusions — form your own opinion from the source code.
+
+### Output
+
+Save your review to a file at:
+`~/projects/strats/labs/sol-checker/reports/{{DATE}}-rev-codex.md`
+
+(Use the suffix `-v2`, `-v3`, etc. if a review file for the same date already exists.)

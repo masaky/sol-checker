@@ -171,6 +171,33 @@ describe("verifyByCode", () => {
 // extractDeclarationName
 // ---------------------------------------------------------------------------
 
+describe("extractFunctionName — acronym handling", () => {
+    it("rejects standalone acronyms ending with 4+ uppercase (zkSNARK)", () => {
+        expect(extractFunctionName(
+            "External verifier trust boundary risk",
+            "The contract relies on an external verifier to validate zkSNARK proofs",
+        )).toBeNull();
+    });
+
+    it("allows function names with short uppercase runs (tokenURI)", () => {
+        expect(extractFunctionName("Issue in tokenURI")).toBe("tokenURI");
+    });
+
+    it("allows function names with mid-word acronyms (verifyECDSAProof)", () => {
+        expect(extractFunctionName("Issue in verifyECDSAProof")).toBe("verifyECDSAProof");
+    });
+
+    it("allows function names with mid-word acronyms (setSNARKVerifier)", () => {
+        expect(extractFunctionName("Issue in setSNARKVerifier")).toBe("setSNARKVerifier");
+    });
+
+    it("rejects terms ending in long acronym suffix (dBFTConsensus → wait, ends lowercase)", () => {
+        // dBFTConsensus: has "BFTC" which is 4 consecutive uppercase but NOT at end → should pass
+        // This is actually a legitimate-looking function name pattern
+        expect(extractFunctionName("Issue in dBFTConsensus")).toBe("dBFTConsensus");
+    });
+});
+
 describe("extractDeclarationName", () => {
     it("extracts contract name from description (Solidity order)", () => {
         const result = extractDeclarationName(
@@ -210,6 +237,30 @@ describe("extractDeclarationName", () => {
 
     it("returns null when no declaration found", () => {
         expect(extractDeclarationName("General reentrancy risk")).toBeNull();
+    });
+
+    it("ignores natural language noise words before 'contract'", () => {
+        // "The contract uses..." should NOT extract "The" as a contract name
+        expect(extractDeclarationName(
+            "Solidity version constraints",
+            "The contract uses Solidity ^0.7.0 which lacks built-in overflow protection",
+        )).toBeNull();
+    });
+
+    it("ignores 'This contract' as a declaration name", () => {
+        expect(extractDeclarationName(
+            "Missing validation",
+            "This contract prevents reentrancy using a mutex lock",
+        )).toBeNull();
+    });
+
+    it("still extracts real names after noise words", () => {
+        // "The Tornado contract" → should extract "Tornado"
+        const result = extractDeclarationName(
+            "Issue found",
+            "The Tornado contract has a vulnerability",
+        );
+        expect(result).toEqual({ type: "contract", name: "Tornado" });
     });
 });
 
@@ -373,5 +424,58 @@ describe("verifyByCode — Vyper function detection", () => {
         const result = verifyByCode(findings, VYPER_SOURCE_LINES);
         // kill_me has no @nonreentrant, so this finding should stay verified
         expect(result[0].verified).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: Tornado Cash finding text (real-world false extraction)
+// ---------------------------------------------------------------------------
+
+describe("verifyByCode — Tornado Cash regression", () => {
+    const TORNADO_LINES = [
+        "pragma solidity ^0.7.0;",                           // 1
+        "interface IVerifier {",                              // 2
+        "  function verifyProof(bytes memory, uint256[6] memory) external returns (bool);", // 3
+        "}",                                                  // 4
+        "abstract contract Tornado {",                        // 5
+        "  IVerifier public immutable verifier;",             // 6
+        "  function withdraw(",                               // 7
+        "    bytes calldata _proof,",                          // 8
+        "    bytes32 _root",                                   // 9
+        "  ) external payable {",                              // 10
+        '    require(_fee <= denomination, "Fee exceeds");',   // 11
+        "    verifier.verifyProof(_proof, [uint256(_root)]);", // 12
+        "  }",                                                 // 13
+        "}",                                                   // 14
+    ];
+
+    it("does not extract 'zkSNARK' as function name from description", () => {
+        const findings: Finding[] = [{
+            severity: "MEDIUM",
+            title: "External verifier trust boundary risk",
+            line: 12,
+            description: "The contract relies on an external verifier contract to validate zkSNARK proofs.",
+            impact: "Compromised verifier could allow fake proofs",
+            fix: "Implement additional verification layers",
+        }];
+        const result = verifyByCode(findings, TORNADO_LINES);
+        // No function name extracted → finding stays verified with no error note
+        expect(result[0].verified).toBe(true);
+        expect(result[0].verifyNote).toBeUndefined();
+    });
+
+    it("does not extract 'The' as declaration name from description", () => {
+        const findings: Finding[] = [{
+            severity: "INFO",
+            title: "Solidity version constraints for security",
+            line: 1,
+            description: "The contract uses Solidity ^0.7.0 which lacks built-in overflow protection.",
+            impact: "Missing overflow protection",
+            fix: "Upgrade to 0.8.x",
+        }];
+        const result = verifyByCode(findings, TORNADO_LINES);
+        // "The" should not be extracted as a declaration name
+        expect(result[0].verified).toBe(true);
+        expect(result[0].verifyNote).toBeUndefined();
     });
 });
