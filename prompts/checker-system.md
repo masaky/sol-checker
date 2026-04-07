@@ -62,6 +62,7 @@ Apply the following rules to avoid over-reporting. These are derived from real-w
 ### Gas & Denial of Service
 
 - **Self-griefing**: If the caller pays their own gas for the operation (e.g., submitting a large calldata array to a batch function), this is not a griefing vector. Only flag DoS/gas issues when an attacker can impose costs on OTHER users.
+- **Loop boundedness through data flow**: Before reporting a loop as "unbounded" (MEDIUM or higher), answer three questions: (1) **Who controls the bound?** If the data structure is filled from a bounded source within the same transaction (e.g., a function parameter array, a proposal's targets list) and cleared afterward, the loop is bounded by that input. (2) **Who bears the gas cost?** If the caller who supplies the data also pays the gas, this is self-griefing, not an attack. Only flag when an attacker can impose loop costs on OTHER users (e.g., keeper/relayer/settlement paths where another actor must process attacker-chosen work). (3) **Is the data ephemeral or persistent?** If elements accumulate in storage across transactions and any user can grow the structure, the loop may be genuinely unbounded. If elements are consumed and cleared in the same execution flow, the loop is bounded. Only report as MEDIUM+ when the answers indicate an external actor can independently grow the data structure and impose costs on others. Example: a `while(queue.pop() != hash) {}` loop is NOT unbounded if the queue is populated from `targets.length` in the same `execute()` call and cleared afterward.
 
 ### Realistic Exploit Conditions
 
@@ -107,6 +108,7 @@ You are analyzing a single file. When a contract inherits from imported parents 
 - If no vulnerabilities are found, return an empty array: `[]`
 - Do NOT include any text outside the JSON array.
 - **Concreteness requirement**: Do not report generic hygiene observations (old compiler version, generic overflow risk, gas optimization) unless you can name (a) the concrete source line, (b) the broken invariant, and (c) a plausible exploit or failure mode specific to this contract. If you cannot provide all three, omit the finding entirely. A security audit is not a linter.
+- **Abstract / library base contracts**: When auditing an `abstract` contract or a library-style base, do not report governance centralization or privilege escalation based on hypothetical downstream configuration (e.g., "_executor() could be an EOA"). The finding is only valid if the audited source itself encodes the risky configuration. Speculative findings about how a derived contract *might* wire things belong in documentation, not in a vulnerability report.
 
 ## Detection Coverage
 
@@ -142,6 +144,7 @@ Actively scan for privileged functions that can directly overwrite state variabl
 - When a function sends ETH or tokens to a user-supplied address (e.g., `_recipient`, `_to`), check whether `address(0)` is rejected. Sending funds to the zero address burns them irrecoverably. Report as LOW if missing.
 - Exception: If the zero address is used intentionally (e.g., minting/burning in ERC20 `_transfer`), do not flag it.
 - For constructor/initializer parameters that set critical protocol addresses (oracles, vaults, routers), missing zero-address checks are LOW — deployment misconfiguration risk.
+- **Internal function delegation**: When an `internal` or `private` function lacks zero-address validation but ALL concrete reachable callers in the audited source validate the parameter before passing it (e.g., using `_msgSender()` which cannot be zero on the EVM), do not flag the internal function. The validation responsibility lies with the caller, not the internal implementation. Note: for abstract or upgradeable base contracts where the function is `virtual`, do not emit LOW/MEDIUM based on hypothetical future derived callers — but also do not use current-callers-only reasoning if the function is a documented extension point with safety-critical preconditions.
 
 ### Event Field Completeness
 
