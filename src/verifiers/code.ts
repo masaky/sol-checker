@@ -292,6 +292,22 @@ function isFunctionNearLine(
     return false;
 }
 
+/**
+ * Search the entire file for any usage of an identifier (not just declarations).
+ * Returns the first 1-based line number where the identifier appears, or null.
+ * Used as a last-resort fallback when the identifier is a state variable
+ * declared in a parent contract but referenced in this file.
+ */
+function findIdentifierUsage(sourceLines: string[], name: string): number | null {
+    const re = new RegExp("\\b" + name + "\\b");
+    for (let i = 0; i < sourceLines.length; i++) {
+        if (re.test(sourceLines[i])) {
+            return i + 1; // 1-based
+        }
+    }
+    return null;
+}
+
 // ---------------------------------------------------------------------------
 // Main verifier
 // ---------------------------------------------------------------------------
@@ -334,12 +350,21 @@ export function verifyByCode(
             // Check 2: find function declaration and validate reported line
             const funcDeclLine = findFunctionLine(sourceLines, funcName);
             if (funcDeclLine === null) {
-                // Function name not found anywhere — check if it appears
+                // Function name not found as declaration — check if it appears
                 // as a reference (not a declaration) near the reported line
                 if (!isFunctionNearLine(sourceLines, funcName, f.line, tolerance)) {
-                    result.verified = false;
-                    result.verifyNote =
-                        `Function "${funcName}" not found near line ${f.line} or elsewhere in file`;
+                    // Last resort: search the entire file for any usage.
+                    // The identifier may be a state variable declared in a
+                    // parent contract but referenced in this file.
+                    const usageLine = findIdentifierUsage(sourceLines, funcName);
+                    if (usageLine !== null) {
+                        result.verifyNote =
+                            `"${funcName}" not declared in this file but referenced at line ${usageLine} (likely declared in parent contract)`;
+                    } else {
+                        result.verified = false;
+                        result.verifyNote =
+                            `Function "${funcName}" not found near line ${f.line} or elsewhere in file`;
+                    }
                     return result;
                 }
             } else if (funcDeclLine !== f.line) {

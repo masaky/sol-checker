@@ -637,3 +637,58 @@ describe("NatSpec over-correction prevention", () => {
         expect(result[0].originalLine).toBeUndefined();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Parent contract state variable (identifier usage fallback)
+// ---------------------------------------------------------------------------
+
+describe("verifyByCode — parent contract state variable", () => {
+    // Simulates EigenLayer StrategyManager: specialAdmin is a state variable
+    // used early in the file (L6) but the finding reports a line far away (L40).
+    // No function declaration for "specialAdmin" exists, and it's too far from
+    // L40 to be caught by isFunctionNearLine (tolerance=10).
+    const PARENT_VAR_SOURCE: string[] = [];
+    // Build a 50-line source where specialAdmin appears only at line 6
+    for (let i = 0; i < 50; i++) PARENT_VAR_SOURCE.push("    // filler line");
+    PARENT_VAR_SOURCE[0] = "// SPDX-License-Identifier: MIT";
+    PARENT_VAR_SOURCE[1] = "pragma solidity ^0.8.0;";
+    PARENT_VAR_SOURCE[3] = "contract Manager is ManagerStorage {";
+    PARENT_VAR_SOURCE[4] = "    modifier onlySpecialAdmin() {";
+    PARENT_VAR_SOURCE[5] = '        require(msg.sender == specialAdmin, "!");';
+    PARENT_VAR_SOURCE[6] = "        _;";
+    PARENT_VAR_SOURCE[7] = "    }";
+    // Lines 30-40: a function far from the variable usage
+    PARENT_VAR_SOURCE[38] = "    function doSomething() external {";
+    PARENT_VAR_SOURCE[39] = "        // reported line 40 — nothing relevant here";
+    PARENT_VAR_SOURCE[40] = "    }";
+
+    it("marks verified when identifier is used in file but not declared (parent contract variable)", () => {
+        const findings: Finding[] = [{
+            severity: "MEDIUM",
+            title: "Governance Centralization Risk - specialAdmin Role",
+            line: 40,
+            description: "The specialAdmin can instantly change settings",
+            impact: "Compromised specialAdmin can manipulate options",
+            fix: "Implement timelock",
+        }];
+        const result = verifyByCode(findings, PARENT_VAR_SOURCE);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].verifyNote).toBeDefined();
+        expect(result[0].verifyNote!).toContain("not declared in this file but referenced");
+        expect(result[0].verifyNote!).toContain("parent contract");
+    });
+
+    it("still marks unverified when identifier is truly absent", () => {
+        const findings: Finding[] = [{
+            severity: "MEDIUM",
+            title: "Issue with nonExistentVar",
+            line: 40,
+            description: "The nonExistentVar can be exploited",
+            impact: "Loss of funds",
+            fix: "Add validation",
+        }];
+        const result = verifyByCode(findings, PARENT_VAR_SOURCE);
+        expect(result[0].verified).toBe(false);
+        expect(result[0].verifyNote).toContain("not found near line");
+    });
+});
