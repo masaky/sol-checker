@@ -10,6 +10,7 @@ import { ProviderError } from "./providers/base.js";
 import type { VerifiedFinding } from "./providers/base.js";
 import { formatTerminal, formatMarkdown } from "./reporter.js";
 import { verify } from "./verifier.js";
+import { loadScore, saveScore, calculateScore, totalScore, displayScore, getScorePath } from "./score.js";
 
 // ---------------------------------------------------------------------------
 // CLI Definition
@@ -156,6 +157,46 @@ program
             console.log(chalk.yellow(`⚠ Config file already exists: ${result.path}`));
             console.log(chalk.gray("  Skipped. Delete the file first if you want to re-initialize."));
         }
+    });
+
+// ---------------------------------------------------------------------------
+// score command
+// ---------------------------------------------------------------------------
+
+const scoreCmd = program
+    .command("score")
+    .description("Show Production Readiness Score (PRS)")
+    .action(() => {
+        const data = loadScore();
+        displayScore(data);
+    });
+
+scoreCmd
+    .command("update")
+    .description("Recalculate score from report files")
+    .requiredOption("--reports <dir>", "Path to reports directory")
+    .requiredOption("--contracts <dir>", "Path to contracts directory")
+    .option("--note <text>", "Note for this score entry", "")
+    .action((options: { reports: string; contracts: string; note: string }) => {
+        const breakdown = calculateScore(options.reports, options.contracts);
+        const score = totalScore(breakdown);
+        const tier = Math.floor(score / 15) + 1;
+        const date = new Date().toISOString().slice(0, 10);
+
+        const data = loadScore();
+        data.history.push({
+            date,
+            score,
+            tier: Math.min(tier, 7),
+            breakdown,
+            note: options.note,
+        });
+        saveScore(data);
+
+        console.log(chalk.green(`✔ Score updated: ${score}/100`));
+        console.log(chalk.gray(`  Saved to ${getScorePath()}`));
+        console.log();
+        displayScore(data);
     });
 
 // ---------------------------------------------------------------------------
