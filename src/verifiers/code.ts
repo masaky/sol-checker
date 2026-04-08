@@ -204,6 +204,64 @@ function hasModifierOnFunction(
 }
 
 // ---------------------------------------------------------------------------
+// NatSpec / doc-comment detection
+// ---------------------------------------------------------------------------
+
+// Matches NatSpec / doc-comment interior and boundary lines
+const NATSPEC_INTERIOR_RE = /^\s*(\/{3}|\/\*\*|\*[\s/]|\*$)/;
+// Matches the opening line of a NatSpec block comment
+const NATSPEC_BLOCK_OPEN_RE = /^\s*\/\*\*/;
+// Matches a triple-slash NatSpec line
+const NATSPEC_TRIPLE_SLASH_RE = /^\s*\/{3}/;
+
+/**
+ * Return true when the 1-based `line` sits inside a NatSpec / doc-comment
+ * block that directly precedes `funcDeclLine` (also 1-based).
+ *
+ * "Directly precedes" means no blank lines between the comment end and the
+ * function declaration. The comment block must be a genuine NatSpec block
+ * (opened with slash-star-star or using triple-slash), not a regular block comment.
+ */
+function isNatSpecAboveFunction(
+    sourceLines: string[],
+    line: number,
+    funcDeclLine: number,
+): boolean {
+    if (line >= funcDeclLine) return false;
+
+    // Step 1: The line immediately above the declaration must be a comment
+    // line (no blank lines allowed between comment and declaration).
+    const lineAboveDecl = sourceLines[funcDeclLine - 2]; // 0-based
+    if (!lineAboveDecl || !NATSPEC_INTERIOR_RE.test(lineAboveDecl.trim())) {
+        return false;
+    }
+
+    // Step 2: Walk backwards from the declaration to the reported line,
+    // verifying every line is a comment interior line (no blank lines).
+    for (let i = funcDeclLine - 2; i >= line - 1; i--) {
+        const trimmed = sourceLines[i].trim();
+        if (NATSPEC_INTERIOR_RE.test(trimmed)) continue;
+        return false; // blank line or non-comment breaks the chain
+    }
+
+    // Step 3: Verify the block is genuine NatSpec by finding its opener.
+    // Continue walking upward from the reported line to find the start of
+    // the comment block, then check it opens with `/**` or `///`.
+    let openerIdx = line - 1; // 0-based index of reported line
+    for (let i = openerIdx - 1; i >= 0; i--) {
+        const trimmed = sourceLines[i].trim();
+        if (NATSPEC_INTERIOR_RE.test(trimmed)) {
+            openerIdx = i;
+            continue;
+        }
+        break; // non-comment line — opener is at openerIdx
+    }
+
+    const openerLine = sourceLines[openerIdx].trim();
+    return NATSPEC_BLOCK_OPEN_RE.test(openerLine) || NATSPEC_TRIPLE_SLASH_RE.test(openerLine);
+}
+
+// ---------------------------------------------------------------------------
 // Line search helpers
 // ---------------------------------------------------------------------------
 
@@ -285,10 +343,16 @@ export function verifyByCode(
                     return result;
                 }
             } else if (funcDeclLine !== f.line) {
-                // Function exists but at a different line — correct it
-                result.originalLine = f.line;
-                result.line = funcDeclLine;
-                result.verifyNote = `Line corrected: ${f.line}\u2192${funcDeclLine}`;
+                // If the reported line is inside the NatSpec block directly
+                // above the function declaration, the checker pointed at the
+                // doc-comment — which is contextually correct. Skip correction.
+                if (isNatSpecAboveFunction(sourceLines, f.line, funcDeclLine)) {
+                    // keep f.line as-is — no correction needed
+                } else {
+                    result.originalLine = f.line;
+                    result.line = funcDeclLine;
+                    result.verifyNote = `Line corrected: ${f.line}\u2192${funcDeclLine}`;
+                }
             }
 
             // Check 3: false-positive modifier claims
@@ -323,9 +387,13 @@ export function verifyByCode(
                         return result;
                     }
                 } else if (declLine !== f.line) {
-                    result.originalLine = f.line;
-                    result.line = declLine;
-                    result.verifyNote = `Line corrected: ${f.line}\u2192${declLine}`;
+                    if (isNatSpecAboveFunction(sourceLines, f.line, declLine)) {
+                        // Reported line is in NatSpec above declaration — keep it
+                    } else {
+                        result.originalLine = f.line;
+                        result.line = declLine;
+                        result.verifyNote = `Line corrected: ${f.line}\u2192${declLine}`;
+                    }
                 }
             }
         }

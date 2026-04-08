@@ -479,3 +479,161 @@ describe("verifyByCode — Tornado Cash regression", () => {
         expect(result[0].verifyNote).toBeUndefined();
     });
 });
+
+// ---------------------------------------------------------------------------
+// NatSpec over-correction prevention
+// ---------------------------------------------------------------------------
+
+const NATSPEC_SOURCE = [
+    "// SPDX-License-Identifier: MIT",                   // 1
+    "pragma solidity ^0.8.0;",                            // 2
+    "",                                                    // 3
+    "contract Seaport {",                                  // 4
+    "",                                                    // 5
+    "    /**",                                             // 6
+    "     * @notice Get status. Note that this function",  // 7
+    "     *         is susceptible to view reentrancy.",   // 8
+    "     * @param orderHash The hash.",                   // 9
+    "     * @return isValidated Whether validated.",       // 10
+    "     */",                                            // 11
+    "    function getOrderStatus(",                       // 12
+    "        bytes32 orderHash",                          // 13
+    "    ) external view returns (bool isValidated) {",   // 14
+    "        return _getOrderStatus(orderHash);",         // 15
+    "    }",                                              // 16
+    "",                                                    // 17
+    "    /// @notice Get nonce. Susceptible to view reentrancy.", // 18
+    "    function getContractOffererNonce(",               // 19
+    "        address contractOfferer",                     // 20
+    "    ) external view returns (uint256 nonce) {",      // 21
+    "        nonce = _contractNonces[contractOfferer];",   // 22
+    "    }",                                              // 23
+    "",                                                    // 24
+    "    function unrelatedFunction() public {",          // 25
+    "        // no NatSpec above",                        // 26
+    "    }",                                              // 27
+    "",                                                    // 28
+    "    /*",                                              // 29
+    "     * This is a regular block comment,",             // 30
+    "     * NOT NatSpec.",                                  // 31
+    "     */",                                            // 32
+    "    function regularComment() public {",             // 33
+    "        // non-doc comment above",                   // 34
+    "    }",                                              // 35
+    "",                                                    // 36
+    "    /**",                                             // 37
+    "     * @notice Detached NatSpec.",                    // 38
+    "     */",                                            // 39
+    "",                                                    // 40  blank line gap
+    "    function detachedDoc() public {",                // 41
+    "        // blank line between NatSpec and function",  // 42
+    "    }",                                              // 43
+    "}",                                                   // 44
+];
+
+describe("NatSpec over-correction prevention", () => {
+    it("skips correction when reported line is in NatSpec above function (block comment)", () => {
+        const findings: Finding[] = [{
+            severity: "INFO",
+            title: "View reentrancy in getOrderStatus",
+            line: 8, // NatSpec comment line
+            description: "getOrderStatus is susceptible to view reentrancy",
+            impact: "Stale data",
+            fix: "No fix required",
+        }];
+        const result = verifyByCode(findings, NATSPEC_SOURCE);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(8); // kept as-is, not corrected to 12
+        expect(result[0].originalLine).toBeUndefined();
+    });
+
+    it("skips correction when reported line is in NatSpec above function (triple-slash)", () => {
+        const findings: Finding[] = [{
+            severity: "INFO",
+            title: "View reentrancy in getContractOffererNonce",
+            line: 18, // /// comment line
+            description: "getContractOffererNonce is susceptible to view reentrancy",
+            impact: "Stale data",
+            fix: "No fix required",
+        }];
+        const result = verifyByCode(findings, NATSPEC_SOURCE);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(18); // kept as-is, not corrected to 19
+        expect(result[0].originalLine).toBeUndefined();
+    });
+
+    it("still corrects when reported line is NOT in NatSpec above function", () => {
+        const findings: Finding[] = [{
+            severity: "LOW",
+            title: "Issue in unrelatedFunction",
+            line: 5, // empty line, not NatSpec above line 25
+            description: "unrelatedFunction has an issue",
+            impact: "impact",
+            fix: "fix",
+        }];
+        const result = verifyByCode(findings, NATSPEC_SOURCE);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(25); // corrected
+        expect(result[0].originalLine).toBe(5);
+    });
+
+    it("still corrects when reported line is in a regular /* */ block comment (not NatSpec)", () => {
+        const findings: Finding[] = [{
+            severity: "LOW",
+            title: "Issue in regularComment",
+            line: 30, // interior of regular /* */ comment
+            description: "regularComment has an issue",
+            impact: "impact",
+            fix: "fix",
+        }];
+        const result = verifyByCode(findings, NATSPEC_SOURCE);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(33); // corrected to function declaration
+        expect(result[0].originalLine).toBe(30);
+    });
+
+    it("still corrects when blank line separates NatSpec from function declaration", () => {
+        const findings: Finding[] = [{
+            severity: "INFO",
+            title: "Issue in detachedDoc",
+            line: 38, // NatSpec content, but blank line at 40 before function at 41
+            description: "detachedDoc has a detached doc comment",
+            impact: "impact",
+            fix: "fix",
+        }];
+        const result = verifyByCode(findings, NATSPEC_SOURCE);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(41); // corrected — blank line breaks adjacency
+        expect(result[0].originalLine).toBe(38);
+    });
+
+    it("preserves closing */ line when it is part of NatSpec directly above function", () => {
+        const findings: Finding[] = [{
+            severity: "INFO",
+            title: "View reentrancy in getOrderStatus",
+            line: 11, // closing */ line of NatSpec block
+            description: "getOrderStatus is susceptible to view reentrancy",
+            impact: "Stale data",
+            fix: "No fix required",
+        }];
+        const result = verifyByCode(findings, NATSPEC_SOURCE);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(11); // kept — closing line of NatSpec directly above
+        expect(result[0].originalLine).toBeUndefined();
+    });
+
+    it("preserves NatSpec opener line (/**)", () => {
+        const findings: Finding[] = [{
+            severity: "INFO",
+            title: "View reentrancy in getOrderStatus",
+            line: 6, // /** opener line
+            description: "getOrderStatus is susceptible to view reentrancy",
+            impact: "Stale data",
+            fix: "No fix required",
+        }];
+        const result = verifyByCode(findings, NATSPEC_SOURCE);
+        expect(result[0].verified).toBe(true);
+        expect(result[0].line).toBe(6); // kept — opener of NatSpec block
+        expect(result[0].originalLine).toBeUndefined();
+    });
+});
