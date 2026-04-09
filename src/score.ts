@@ -191,26 +191,41 @@ function countContracts(contractDir: string): number {
     return fs.readdirSync(contractDir).filter(f => f.endsWith(".sol")).length;
 }
 
-export function calculateScore(reportDir: string, contractDir: string): ScoreBreakdown {
+export interface ManualCounts {
+    fp?: number;      // false positive count from Codex review
+    fn?: number;      // false negative (missed) count from Codex review
+    total?: number;   // total findings across reviewed reports
+}
+
+export function calculateScore(reportDir: string, contractDir: string, manual?: ManualCounts): ScoreBreakdown {
     const stats = parseReportDir(reportDir);
     const contractCount = countContracts(contractDir);
 
     const unverifiedPct = stats.totalFindings > 0
         ? stats.unverifiedFindings / stats.totalFindings : 0;
 
-    // FP/FN rates: use UNVERIFIED rate as a proxy signal combined with
-    // conservative base estimates from manual Codex review analysis.
-    // TODO: parse actual FP/FN counts from Codex review files (rev-codex.md)
-    //
-    // Base estimates (2026-04-09 manual analysis of 5 reports):
-    //   FP rate ~25% (5/25 findings were false positive or over-calibrated)
-    //   FN rate ~30% (important findings missed per Codex review)
-    // UNVERIFIED rate amplifies FP estimate (unverified findings are suspect)
-    const baseFpRate = 0.25 + (unverifiedPct * 0.15); // worse when UNVERIFIED is high
-    const fpRate = Math.round(20 * Math.max(0, 1 - baseFpRate));
+    let fpRate: number;
+    let fnRate: number;
 
-    const baseFnRate = 0.30;
-    const fnRate = Math.round(20 * (1 - baseFnRate));
+    if (manual?.fp !== undefined && manual?.total !== undefined && manual.total > 0) {
+        // Use actual FP count from manual Codex review analysis
+        const fpPct = manual.fp / manual.total;
+        fpRate = Math.round(20 * Math.max(0, 1 - fpPct));
+    } else {
+        // Fallback: estimate from UNVERIFIED rate (less accurate)
+        const baseFpRate = 0.25 + (unverifiedPct * 0.15);
+        fpRate = Math.round(20 * Math.max(0, 1 - baseFpRate));
+    }
+
+    if (manual?.fn !== undefined && manual?.total !== undefined && manual.total > 0) {
+        // Use actual FN count: fn missed out of (total + fn) real findings
+        const realTotal = manual.total + manual.fn;
+        const fnPct = manual.fn / realTotal;
+        fnRate = Math.round(20 * Math.max(0, 1 - fnPct));
+    } else {
+        const baseFnRate = 0.30;
+        fnRate = Math.round(20 * (1 - baseFnRate));
+    }
 
     // UNVERIFIED rate score
     const unverifiedScore = Math.round(10 * (1 - unverifiedPct));

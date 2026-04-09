@@ -10,7 +10,7 @@ import { ProviderError } from "./providers/base.js";
 import type { VerifiedFinding } from "./providers/base.js";
 import { formatTerminal, formatMarkdown } from "./reporter.js";
 import { verify } from "./verifier.js";
-import { loadScore, saveScore, calculateScore, totalScore, displayScore, getScorePath } from "./score.js";
+import { loadScore, saveScore, calculateScore, totalScore, displayScore, getScorePath, type ManualCounts } from "./score.js";
 
 // ---------------------------------------------------------------------------
 // CLI Definition
@@ -176,9 +176,17 @@ scoreCmd
     .description("Recalculate score from report files")
     .requiredOption("--reports <dir>", "Path to reports directory")
     .requiredOption("--contracts <dir>", "Path to contracts directory")
+    .option("--fp <count>", "False positive count from Codex review")
+    .option("--fn <count>", "False negative (missed) count from Codex review")
+    .option("--total <count>", "Total findings across reviewed reports")
     .option("--note <text>", "Note for this score entry", "")
-    .action((options: { reports: string; contracts: string; note: string }) => {
-        const breakdown = calculateScore(options.reports, options.contracts);
+    .action((options: { reports: string; contracts: string; fp?: string; fn?: string; total?: string; note: string }) => {
+        const manual: ManualCounts = {};
+        if (options.fp !== undefined) manual.fp = parseInt(options.fp, 10);
+        if (options.fn !== undefined) manual.fn = parseInt(options.fn, 10);
+        if (options.total !== undefined) manual.total = parseInt(options.total, 10);
+
+        const breakdown = calculateScore(options.reports, options.contracts, manual);
         const score = totalScore(breakdown);
         const tier = Math.floor(score / 15) + 1;
         const date = new Date().toISOString().slice(0, 10);
