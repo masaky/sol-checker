@@ -8,7 +8,7 @@ import { buildPrompt } from "./prompt.js";
 import { ClaudeProvider, resolveApiKey } from "./providers/claude.js";
 import { ProviderError } from "./providers/base.js";
 import type { VerifiedFinding } from "./providers/base.js";
-import { formatTerminal, formatMarkdown } from "./reporter.js";
+import { formatTerminal, formatMarkdown, formatJson } from "./reporter.js";
 import { verify } from "./verifier.js";
 import { loadScore, saveScore, calculateScore, totalScore, displayScore, getScorePath, type ManualCounts } from "./score.js";
 
@@ -36,12 +36,14 @@ program
     .option("-o, --output <path>", "Output report file path")
     .option("--no-verify", "Skip finding verification")
     .option("--verify-model <model>", "Model to use for verification")
+    .option("-f, --format <format>", "Output format (md, json)", "md")
     .action(async (file: string, options: {
         provider: string;
         model?: string;
         output?: string;
         verify?: boolean;
         verifyModel?: string;
+        format: string;
     }) => {
         let spinner: ReturnType<typeof ora> | undefined;
         try {
@@ -53,12 +55,15 @@ program
             const provider = options.provider ?? config.llm.provider;
             const model = options.model ?? config.llm.model;
 
-            console.log(chalk.bold("🔍 sol-checker v0.1.0"));
-            console.log();
-            console.log(`  File:     ${chalk.cyan(file)}`);
-            console.log(`  Provider: ${chalk.cyan(provider)}`);
-            console.log(`  Model:    ${chalk.cyan(model)}`);
-            console.log();
+            const quiet = options.format === "json" && !options.output;
+            const log = quiet ? console.error : console.log;
+
+            log(chalk.bold("🔍 sol-checker v0.1.0"));
+            log();
+            log(`  File:     ${chalk.cyan(file)}`);
+            log(`  Provider: ${chalk.cyan(provider)}`);
+            log(`  Model:    ${chalk.cyan(model)}`);
+            log();
 
             // 3. Check API key before calling LLM
             const apiKey = resolveApiKey(config.llm.api_key);
@@ -112,12 +117,23 @@ program
                 spinner.succeed(`Scan complete — ${result.findings.length} finding(s)`);
             }
 
-            // 6. Terminal output
-            console.log();
-            console.log(formatTerminal(verifiedResult, file));
+            // 6. Terminal output (skip when piping json to stdout)
+            if (!quiet) {
+                console.log();
+                console.log(formatTerminal(verifiedResult, file));
+            }
 
-            // 7. File output (if --output)
-            if (options.output) {
+            // 7. Output
+            if (options.format === "json") {
+                const jsonOutput = formatJson(verifiedResult, file);
+                if (options.output) {
+                    fs.writeFileSync(options.output, jsonOutput, "utf-8");
+                    console.error(chalk.green(`✔ Report saved to ${options.output}`));
+                } else {
+                    // stdout for piping — use console.error for human messages above
+                    process.stdout.write(jsonOutput + "\n");
+                }
+            } else if (options.output) {
                 fs.writeFileSync(options.output, formatMarkdown(verifiedResult, file), "utf-8");
                 console.log(chalk.green(`✔ Report saved to ${options.output}`));
             }
