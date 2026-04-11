@@ -186,3 +186,43 @@ export function formatMarkdown(result: ScanResult, filePath: string): string {
 
     return lines.join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// formatJson
+// ---------------------------------------------------------------------------
+
+export function formatJson(result: ScanResult, filePath: string): string {
+    const date = new Date().toISOString().split("T")[0];
+    const counts = countBySeverity(result.findings);
+
+    const findings = sortFindings(result.findings).map((f) => {
+        const entry: Record<string, unknown> = {
+            severity: f.severity,
+            title: f.title,
+            line: f.line,
+            description: f.description,
+            impact: f.impact,
+            fix: f.fix,
+        };
+        if (isVerifiedFinding(f)) {
+            entry.verified = f.verified;
+            if (f.verifyNote) entry.verifyNote = f.verifyNote;
+            if (f.originalLine !== undefined) entry.originalLine = f.originalLine;
+            if (f.originalSeverity) entry.originalSeverity = f.originalSeverity;
+        }
+        return entry;
+    });
+
+    return JSON.stringify(
+        {
+            file: filePath,
+            date,
+            provider: result.provider,
+            model: result.model,
+            summary: counts,
+            findings,
+        },
+        null,
+        2,
+    );
+}
