@@ -25,6 +25,42 @@ Each element in the array represents one vulnerability and must conform to this 
 ]
 ```
 
+## Description Structure
+
+The `description` field MUST start with metadata lines, a blank line, then the prose.
+
+### Category Tag (required, line 1)
+
+Begin every `description` with exactly one tag:
+
+- `[Vulnerability]` — exploitable flaw (assets at risk, invariant broken, DoS)
+- `[Centralization Risk]` — privileged-role / admin-key trust dependency
+- `[Design Observation]` — architectural or economic design note, not directly exploitable
+- `[Documentation]` — missing/misleading NatSpec, event field, or code comment
+
+`[Design Observation]` and `[Documentation]` MUST NOT be used above INFO. `[Vulnerability]` and `[Centralization Risk]` may appear at any severity. The tag is a classification signal for triage — it does not replace the severity field.
+
+### Primary / Related / Preconditions (required for HIGH and MEDIUM)
+
+For HIGH and MEDIUM findings, add these three lines immediately after the tag (before the blank line and prose):
+
+- `Primary: L<n>` — single root-cause line; MUST match the JSON `line` field
+- `Related: L<a>, L<b>, ...` — other lines in the exploit path (setter, state mutation, external call). Omit this line entirely if none.
+- `Preconditions: <condition>` — external conditions required for exploitation (compromised key, malicious migrator already set, specific caller role). Write `Preconditions: none` when reachable by any caller with no extra assumptions.
+
+Example description for a HIGH finding:
+
+```
+[Vulnerability]
+Primary: L1497
+Related: L1492, L1502, L1504, L1505
+Preconditions: the `migrator` address (settable by owner at L1492) is malicious or compromised.
+
+The public migrate() function at L1497 transfers all LP tokens ...
+```
+
+For LOW and INFO findings, the Primary/Related/Preconditions lines are optional; the Category Tag remains required.
+
 # Severity Levels
 
 - **HIGH**: Can lead to direct loss of funds, complete contract takeover, or permanent denial of service. For governance findings, HIGH requires that a privileged actor can **directly** drain or irreversibly seize user funds from the contract source alone, without assuming compromise of additional external components.
@@ -134,6 +170,11 @@ You are analyzing a single file. When a contract inherits from imported parents 
 - **Access-control base contracts (OZ `AccessControl`, `Ownable`, `UUPSUpgradeable`, etc.)**: Structural patterns in these bases — `DEFAULT_ADMIN_ROLE` self-administration (admin of `0x00` is `0x00`), role admin hierarchy defaulting to `DEFAULT_ADMIN_ROLE` when unset, missing `address(0)` checks in `_grantRole` / `_revokeRole` — are documented design, not vulnerabilities at the base level. The base itself is `abstract` and has no role holders; the Ronin/Harmony-style governance risk only materializes at the **concrete deployment** (who is granted `DEFAULT_ADMIN_ROLE`, is it behind timelock/multisig, is there a recovery path). When auditing the base: severity MUST NOT exceed INFO, classify as `inheritor-responsibility`, and frame the description as "concrete deployments inheriting this base must add timelock/multisig/`AccessControlDefaultAdminRules` or equivalent mitigation." When auditing a concrete deployment: re-evaluate using the deployer's admin wiring and apply MEDIUM/HIGH per the governance-risk rules below.
 - **Documented default behavior vs uninitialized bug — terminology**: Do NOT describe documented library defaults (e.g., OZ `getRoleAdmin(role)` returning `DEFAULT_ADMIN_ROLE` for unset roles, unset mappings returning zero values) as "not initialized" / "uninitialized" / "未初期化." These are by-design fallbacks with NatSpec coverage. Use "documented default fallback" or "by-design default behavior." The distinction matters: "uninitialized" implies a bug a deployer could forget, inflating severity; "documented default" reflects the intentional design for inheritors who do not need custom role hierarchies.
 - **Public library fingerprint recognition**: When the SPDX header or file preamble identifies the contract as a well-known, battle-tested library (e.g., `// OpenZeppelin Contracts (last updated vX.Y.Z)`, `// Solmate`, `// Solady`), treat documented design choices of that library as **contextual normalization** and do not emit findings for patterns the library has intentionally settled on. Examples: OZ `AccessControl._grantRole` omits `address(0)` validation by design (no active actor can use that role); OZ ERC20's `_transfer` rejects `address(0)` for `from`/`to` but permits mint/burn to/from the zero address; Solmate/Solady omit SafeMath wrappers because ≥0.8.0 arithmetic already reverts on overflow. Emit only when (a) the stated library version is known to have a real CVE, or (b) the audited file diverges from the library's documented contract. Do not re-flag OZ/Solmate/Solady base-library decisions repeatedly — that produces alert fatigue and drowns real findings.
+- **Recommendation self-validation**: Before emitting the `fix` field, check that it actually eliminates the threat described in `impact`. A fix is invalid when it leaves the attacker path intact. Three common self-contradicting patterns:
+  - **"Add `onlyX` to a function where `X` is the attacker in the threat model"**: If the `impact` names a compromised privileged actor (owner, migrator, governor, admin) as the attacker, adding `onlyOwner` / `onlyMigrator` to the function that actor abuses does NOT mitigate — the attacker already holds that role and can simply call the function themselves. Example: for a "migrator can drain LP via `migrate()`" HIGH, "add `onlyOwner` to `migrate()`" is self-defeating because the threat is a compromised owner + compromised migrator together. The correct fixes name governance-level mitigations: timelock on `setMigrator`, hardcoded trusted migrator address, one-time migration with an expiring deadline, multisig-enforced approval, or full immutability of the migrator slot.
+  - **"Add a `require` that a called internal/parent function already enforces"**: If the function delegates to `_mint` / `_transfer` / `_grantRole` / similar guarded primitives that already revert on the invalid input, the fix is not "add require" — the fix is to omit the finding entirely (see Inheritance & Import Awareness).
+  - **"Add a local `require` inside an abstract / library / base contract"**: For abstract bases and library contracts, frame the fix as "derived contracts must validate X" or "deployers must ensure X at integration level", not "this base must add require Y" (see abstract/library rule above).
+  When no concrete fix closes the threat at the audited contract's layer, state that explicitly in the `fix` field: "Mitigation requires governance or deployment-level change (timelock, multisig, immutability); this contract alone cannot close the risk." Do NOT invent a local check that fails the threat test just to populate the field.
 
 ## Detection Coverage
 
@@ -170,7 +211,13 @@ Actively scan for privileged functions that can directly overwrite state variabl
 
 - When a function sends ETH or tokens to a user-supplied address (e.g., `_recipient`, `_to`), check whether `address(0)` is rejected. Sending funds to the zero address burns them irrecoverably. Report as LOW if missing.
 - Exception: If the zero address is used intentionally (e.g., minting/burning in ERC20 `_transfer`), do not flag it.
+- **Burn vs Revert — trace the transfer primitive before writing `impact`**: "Sending to `address(0)` burns funds" is only true for *raw* transfer primitives that allow it. For OZ ERC20, `_mint(address(0), x)` and `_transfer(*, address(0), *)` **revert** — so the real impact is **DoS of every path that mints/transfers**, not burn. Before writing "funds are burned" in the `impact` field, identify which primitive runs when the zero address flows through:
+  - `_mint(addr, amount)` on OZ-style ERC20 → revert on `addr == 0` → impact is DoS of the caller (e.g., if `devaddr == 0`, `sushi.mint(devaddr, ...)` inside `updatePool` reverts and bricks pool update / deposit / withdraw / harvest — do NOT write "future dev rewards are burned").
+  - Raw `token.transfer(0, x)` on lax custom ERC20s (no zero check) → actual burn.
+  - Native `payable(0).transfer(x)` → actual burn (no revert).
+  Pick the impact that matches the primitive. If you cannot identify the primitive, say "impact depends on whether the downstream mint/transfer rejects zero; if it does, DoS, otherwise irrecoverable burn" rather than asserting burn.
 - For constructor/initializer parameters that set critical protocol addresses (oracles, vaults, routers), missing zero-address checks are LOW — deployment misconfiguration risk.
+- **Historical deployed contracts**: When the audited source is a snapshot of a contract that has already been deployed in production, constructor-time and one-time-initializer zero-address findings MUST be demoted to INFO. The deployment event is past; the misconfiguration risk is not actionable on-chain. Detection signals (any two of): (a) the SPDX / header / comment names a known production protocol and version (e.g., `SushiSwap MasterChef`, `Chef Nomi era`, `Compound v2`, `Uniswap V2 Core`, `WETH9`, `Multicall3`); (b) the `pragma` is pinned to an older version (≤0.6.x) consistent with the historical deployment; (c) the contract shape (function names, storage layout) matches a public mainnet deployment byte-for-byte. When these signals are present, write "Historical deployment — deployment-time misconfiguration is not actionable; demoted to INFO" in the `description` and keep severity at INFO. Post-deployment setters that can still be called (e.g., a `dev()` function that allows future `devaddr` changes) are NOT covered by this demotion — they remain LOW/MEDIUM per their own rules.
 - **Critical governance setters**: Setter functions that change privileged addresses post-deployment (`setGov`, `setOracle`, `setVaultUtils`, `setPriceFeed`, `upgradeVault`'s `_newVault`) should reject `address(0)`. Even when gated by `onlyGov`, a misclicked zero address creates a recovery hole — governance may be permanently bricked (`setGov(0)`), fund-transfer setters may burn tokens (`upgradeVault(0, token, amount)`), or price/util setters may halt the protocol until the (still-valid) gov can fix it. Report as LOW. Do not downgrade to INFO just because the caller is trusted — operator error is a realistic threat even without compromise.
 - **Mapping sentinel corruption**: When a mapping uses `address(0)` as the "not registered" sentinel (e.g., `if (mapping[key] == address(0)) revert NotFound()`), any registration function that accepts an address parameter MUST reject `address(0)`. Otherwise, registering with `address(0)` corrupts the sentinel — the entry appears unregistered in lookups, allowing duplicate registrations, stale array entries, and downstream data structure corruption. Report as LOW. Example: if `registerKey(address oracle)` stores `mapping[kh] = oracle` and uses `mapping[kh] != address(0)` as a duplicate check, calling `registerKey(address(0))` allows the same key to be registered twice.
 - **Internal function delegation**: When an `internal` or `private` function lacks zero-address validation but ALL concrete reachable callers in the audited source validate the parameter before passing it (e.g., using `_msgSender()` which cannot be zero on the EVM), do not flag the internal function. The validation responsibility lies with the caller, not the internal implementation. Note: for abstract or upgradeable base contracts where the function is `virtual`, do not emit LOW/MEDIUM based on hypothetical future derived callers — but also do not use current-callers-only reasoning if the function is a documented extension point with safety-critical preconditions.
