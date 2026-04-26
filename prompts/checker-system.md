@@ -130,6 +130,40 @@ Apply the following rules to avoid over-reporting. These are derived from real-w
 - **Two's complement mixed arithmetic**: MakerDAO-style functions like `_add(uint x, int y) { z = x + uint(y); require(y >= 0 || z <= x); require(y <= 0 || z >= x); }` intentionally exploit two's complement wrapping of `uint(y)` for negative `y` values. The subsequent require statements correctly validate the result. Do NOT report the `uint(y)` cast as "unchecked conversion" — the require guards are the intended safety mechanism.
 - **Check ordering**: In pre-0.8.0 Solidity, arithmetic operations that overflow do NOT revert — they wrap silently. A require statement placed AFTER the operation still provides full protection because it reverts the transaction before any state is committed. Do not downgrade these checks just because they appear after the operation rather than before.
 
+### Symmetric Function Pair Asymmetry
+
+When comparing functions that look symmetric (`join`/`exit`, `deposit`/`withdraw`, `mint`/`burn`, `lock`/`unlock`, `increase`/`decrease`, `enter`/`leave`), the absence of a guard in one and presence in the other is NOT automatically a vulnerability. The two sides usually move value in opposite directions, so a stale-state precondition that protects one side may be unnecessary on the other.
+
+Before flagging "function X lacks the freshness/validation check that paired function Y has":
+
+1. **Write the value formula for each side** — which storage variable multiplies / divides user input on each function (`chi * wad`, `shares * exchangeRate`, etc.).
+2. **Determine direction of stale state** — if the relevant accumulator/state were stale, which side gets MORE value (user) vs. LESS value (user)?
+3. **Identify the beneficiary of the missing check** — a missing freshness check is only a vulnerability when stale state lets the **caller extract value at protocol expense**. If stale state only causes the caller to lose value, users have a natural incentive to refresh state first; the missing check is benign.
+
+**Worked example (MakerDAO Pot.sol)**: `join()` requires `now == rho` because stale (lower) `chi` would let users acquire more `pie` per `dai` paid (user-favorable, protocol-unfavorable). `exit()` does NOT need this check: stale `chi` reduces the dai users receive (`_mul(chi, wad)`), so users have a natural incentive to call `drip()` first. Flagging "exit() lacks freshness check" as MEDIUM is a False Positive — impact direction is inverted.
+
+**Gate**: If you cannot articulate (a) the formula on each side, (b) which direction stale state moves value, and (c) who profits from the staleness, demote the asymmetry finding to INFO at most, or omit. "Y has check, X doesn't" without directional analysis is not a security finding.
+
+### Accumulator-Based Findings (chi, index, exchangeRate, growthFactor)
+
+When a finding hinges on a rate accumulator that the protocol updates over time (MakerDAO `chi`, Compound `borrowIndex` / `exchangeRateStored`, Aave liquidity index, Curve `virtual_price`, Yearn `pricePerShare`), state these properties explicitly in the description before drawing exploit conclusions:
+
+1. **Monotonicity direction** — does the accumulator only increase (positive yield), only decrease, or can it move both ways (e.g., negative interest, slashing)? In MakerDAO Pot.sol, `chi` is monotonically non-decreasing **iff** `dsr >= ONE`; reasoning that assumes monotonicity must note the assumption.
+2. **Multiplicative vs divisive role** — does the accumulator multiply user input (debt accrues, savings grow) or divide it (shares dilute, exchange rate scales)?
+3. **Stale-state beneficiary** — combine (1) and (2) to identify who profits when the accumulator is stale on each entry/exit path.
+
+Without this triple, accumulator-related findings frequently invert the impact direction (see the symmetric pair rule above).
+
+### Keyword / Pattern Detection Completeness
+
+When emitting findings based on the presence of a specific keyword or syntactic pattern (`now`, `tx.origin`, `block.timestamp`, `selfdestruct`, `delegatecall`, deprecated builtins), the listed line numbers MUST be **exhaustive**. Re-scan the whole file token-by-token before finalizing the list — do not enumerate from memory.
+
+- Common failure: missing occurrences inside arithmetic expressions or function arguments (e.g., listing `rho = now` and `require(now == rho)` but missing `now - rho` on the next line).
+- Reviewers use the line list to verify scope; a partial list is a finding-quality bug even when the underlying issue is real.
+- If the keyword has many occurrences, list them all in the description rather than truncating with "etc." Truncation hides the completeness gap.
+
+When the pattern is non-security (style/modernization, e.g., `now` vs `block.timestamp` on a pre-0.7.0 pragma where both are equivalent), keep the finding at INFO and explicitly note the pragma context — but the enumeration completeness rule still applies.
+
 ### Revert-Based Gas Estimation
 
 - Some contracts use a pattern where a function executes a transaction and then ALWAYS reverts to measure gas usage (e.g., `requiredTxGas`). Because the function unconditionally reverts, all state changes are rolled back — this is safe by design.
