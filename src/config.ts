@@ -12,6 +12,7 @@ export interface SolCheckerConfig {
         provider: string;
         api_key: string;
         model: string;
+        claude_cli_config_dir: string;
     };
     output: {
         format: string;
@@ -34,6 +35,7 @@ export const DEFAULT_CONFIG: SolCheckerConfig = {
         provider: "claude",
         api_key: "",
         model: "claude-sonnet-4-20250514",
+        claude_cli_config_dir: "",
     },
     output: {
         format: "markdown",
@@ -74,6 +76,7 @@ export function loadConfig(homeDir?: string): SolCheckerConfig {
             provider: parsed.llm?.provider ?? DEFAULT_CONFIG.llm.provider,
             api_key: parsed.llm?.api_key ?? DEFAULT_CONFIG.llm.api_key,
             model: parsed.llm?.model ?? DEFAULT_CONFIG.llm.model,
+            claude_cli_config_dir: parsed.llm?.claude_cli_config_dir ?? DEFAULT_CONFIG.llm.claude_cli_config_dir,
         },
         output: {
             format: parsed.output?.format ?? DEFAULT_CONFIG.output.format,
@@ -97,6 +100,7 @@ function configToToml(config: SolCheckerConfig): string {
 provider = "${config.llm.provider}"
 api_key = "${config.llm.api_key}"
 model = "${config.llm.model}"
+claude_cli_config_dir = "${config.llm.claude_cli_config_dir}"
 
 [output]
 format = "${config.output.format}"

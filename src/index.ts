@@ -2,12 +2,15 @@ import { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { initConfig, loadConfig } from "./config.js";
 import { readSolFile, ScannerError } from "./scanner.js";
 import { buildPrompt } from "./prompt.js";
 import { ClaudeProvider, resolveApiKey } from "./providers/claude.js";
+import { ClaudeCliProvider } from "./providers/claude-cli.js";
 import { ProviderError } from "./providers/base.js";
-import type { VerifiedFinding } from "./providers/base.js";
+import type { LLMProvider, VerifiedFinding } from "./providers/base.js";
 import { formatTerminal, formatMarkdown, formatJson } from "./reporter.js";
 import { verify } from "./verifier.js";
 import { loadScore, saveScore, calculateScore, totalScore, displayScore, getScorePath, type ManualCounts } from "./score.js";
@@ -31,14 +34,14 @@ program
     .command("scan")
     .description("Scan a Solidity file for vulnerabilities")
     .argument("<file>", "Path to .sol file")
-    .option("-p, --provider <provider>", "LLM provider (claude, openai)", "claude")
+    .option("-p, --provider <provider>", "LLM provider (claude, claude-cli, openai)")
     .option("-m, --model <model>", "LLM model name")
     .option("-o, --output <path>", "Output report file path")
     .option("--no-verify", "Skip finding verification")
     .option("--verify-model <model>", "Model to use for verification")
     .option("-f, --format <format>", "Output format (md, json)", "md")
     .action(async (file: string, options: {
-        provider: string;
+        provider?: string;
         model?: string;
         output?: string;
         verify?: boolean;
@@ -52,7 +55,7 @@ program
 
             // 2. Load config
             const config = loadConfig();
-            const provider = options.provider ?? config.llm.provider;
+            const provider = options.provider ?? config.llm.provider ?? "claude";
             const model = options.model ?? config.llm.model;
 
             const quiet = options.format === "json" && !options.output;
@@ -65,17 +68,26 @@ program
             log(`  Model:    ${chalk.cyan(model)}`);
             log();
 
-            // 3. Check API key before calling LLM
-            const apiKey = resolveApiKey(config.llm.api_key);
-            if (!apiKey) {
-                console.error(chalk.red("Error: No API key configured."));
-                console.error();
-                console.error("  Set your Anthropic API key using one of:");
-                console.error(chalk.gray("    1. export ANTHROPIC_API_KEY=\"sk-ant-...\""));
-                console.error(chalk.gray("    2. sol-checker init  → edit ~/.sol-checker/config.toml"));
-                console.error();
-                console.error(chalk.gray("  Get your key at: https://console.anthropic.com/settings/keys"));
-                process.exit(1);
+            // 3. Build LLM provider
+            const isCli = provider === "claude-cli";
+            let llm: LLMProvider;
+            if (isCli) {
+                const configDir = config.llm.claude_cli_config_dir
+                    || path.join(os.homedir(), ".claude-ac2");
+                llm = new ClaudeCliProvider(configDir, model);
+            } else {
+                const apiKey = resolveApiKey(config.llm.api_key);
+                if (!apiKey) {
+                    console.error(chalk.red("Error: No API key configured."));
+                    console.error();
+                    console.error("  Set your Anthropic API key using one of:");
+                    console.error(chalk.gray("    1. export ANTHROPIC_API_KEY=\"sk-ant-...\""));
+                    console.error(chalk.gray("    2. sol-checker init  → edit ~/.sol-checker/config.toml"));
+                    console.error();
+                    console.error(chalk.gray("  Get your key at: https://console.anthropic.com/settings/keys"));
+                    process.exit(1);
+                }
+                llm = new ClaudeProvider(apiKey, model);
             }
 
             // 4. Build prompt
@@ -83,7 +95,6 @@ program
 
             // 5. Call LLM with spinner
             spinner = ora("Scanning for vulnerabilities...").start();
-            const llm = new ClaudeProvider(apiKey, model);
             const result = await llm.scan(prompt.system, prompt.user);
 
             // 5b. Verify findings
@@ -93,7 +104,12 @@ program
             if (shouldVerify && result.findings.length > 0) {
                 spinner.text = "Verifying findings...";
                 const verifyModel = options.verifyModel ?? (config.verify.model || model);
-                const verifyProvider = new ClaudeProvider(apiKey, verifyModel);
+                const verifyProvider = isCli
+                    ? new ClaudeCliProvider(
+                        config.llm.claude_cli_config_dir || path.join(os.homedir(), ".claude-ac2"),
+                        verifyModel
+                    )
+                    : new ClaudeProvider(resolveApiKey(config.llm.api_key), verifyModel);
 
                 const verified = await verify(result.findings, target.source, {
                     enabled: true,
