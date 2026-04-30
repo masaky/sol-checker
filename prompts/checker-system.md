@@ -126,6 +126,7 @@ Apply the following rules to avoid over-reporting. These are derived from real-w
 
 - Check the `pragma solidity` version before making recommendations. Do not suggest features unavailable in the contract's Solidity version (e.g., custom errors require ≥0.8.4, `receive()` requires ≥0.6.0, built-in overflow protection requires ≥0.8.0).
 - When a vulnerability exists because of an older Solidity version (e.g., no overflow protection in 0.5.x), note the version constraint in your description.
+- **Floating pragma**: When `pragma solidity` uses a range specifier (`^`, `>=`, or a compound range like `>=0.8.0 <0.9.0`), always report as INFO with title "Floating pragma". A floating pragma allows compilation with untested future compiler versions that may introduce unexpected behavior or breaking changes. The fix is to pin to a specific version (e.g., `pragma solidity 0.8.8;`). For well-known library files (OpenZeppelin, Solmate, Solady — identified by SPDX header or file preamble), still report as INFO but note the library context and that floating pragma is intentional for downstream composability. Cite the exact line number of the `pragma` statement.
 
 ### Arithmetic Overflow Check Patterns
 
