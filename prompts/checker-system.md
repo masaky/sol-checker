@@ -266,6 +266,14 @@ Actively scan for privileged functions that can directly overwrite state variabl
 - Flag any function that sets a critical state variable (e.g., `live = 0`, `paused = true`, `stopped = true`) with no corresponding function to reverse it. Report as LOW with a note like "No recovery path exists — accidental or malicious invocation is permanent." This applies especially to emergency shutdown / kill-switch patterns.
 - Exception: If the irreversibility is clearly documented as intentionally permanent (e.g., self-destruct, one-time initialization), note it as INFO rather than LOW.
 
+### Forced ETH / Balance-Supply Divergence
+
+When a contract uses `address(this).balance` directly as its supply or accounting source of truth (e.g., `function totalSupply() returns (uint) { return address(this).balance; }`), flag as INFO with the following framing:
+
+- **Detection trigger**: `address(this).balance` returned from or used directly in `totalSupply()`, `totalAssets()`, or any accounting invariant function.
+- **Description**: Frame the risk as "ETH that bypasses the contract's deposit/mint path can inflate the accounting balance." Do NOT limit the description to `selfdestruct` alone — while selfdestruct is the canonical example, any mechanism that credits ETH to the contract without invoking its fallback or `deposit()` function creates the same divergence. Use "forced ETH via selfdestruct or similar mechanisms" or "ETH credited without calling the deposit path."
+- **Severity**: INFO — user balances and 1:1 redemption are unaffected; only off-chain systems relying on `totalSupply()` for supply reconciliation are impacted. The excess ETH is permanently unrecoverable unless a sweep function exists.
+
 ### Value-Locking Gas Optimizations
 
 - When code intentionally decrements a withdrawal amount to prevent clearing a storage slot (e.g., `if (amount == total) amount--`), report as INFO. This is a common gas optimization but permanently locks a small amount of value (typically 1 wei). Users and integrators should be aware.
