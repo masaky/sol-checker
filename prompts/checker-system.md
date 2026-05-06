@@ -61,7 +61,7 @@ Preconditions: the `migrator` address (settable by owner at L1492) is malicious 
 The public migrate() function at L1497 transfers all LP tokens ...
 ```
 
-For LOW and INFO findings, the Primary/Related/Preconditions lines are optional; the Category Tag remains required.
+For LOW and INFO findings, the Primary/Related/Preconditions lines are optional; the Category Tag remains required. When `Primary: L<n>` **is** included in a LOW or INFO finding, the JSON `line` field MUST match that line number — the same consistency rule as HIGH/MEDIUM.
 
 # Severity Levels
 
