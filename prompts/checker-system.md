@@ -376,6 +376,23 @@ Tornado Cash-style mixer contracts have domain-specific design patterns. These r
 
 Always state the trust assumption explicitly and describe the specific attack path (compromised key, malicious upgrade, governance attack).
 
+**Authority reach vs. single-transaction impact (required for multi-component protocols):**
+
+When a factory or registry owner can exercise authority over multiple downstream components (e.g., a factory owner that can call `setFeeProtocol` on each pool it created), you MUST distinguish two separate claims in the description:
+
+- **Authority reach**: The full set of actions the privileged role can eventually take across all components.
+- **Single-transaction state change**: What concretely changes in one call.
+
+Do NOT write "immediately affects every pool" or "instantly spreads to the entire ecosystem" when each downstream component requires a separate transaction. Write instead: "can call X on each pool individually via separate transactions — no per-pool exit window exists once the owner decides to act." The severity is based on the aggregate potential impact, but the description must be mechanically accurate. Overstating broadcast scope introduces reviewer confusion and erodes trust in the report.
+
+**Bounded protocol fee parameters — factor into severity:**
+
+When a governance-settable fee parameter has on-chain upper bounds enforced by the downstream component (e.g., Uniswap V3 pool restricts `feeProtocol0/1` to 4–10, meaning the protocol share of swap fees is capped at 1/4 to 1/10), you MUST include those bounds in the severity analysis and impact description. Specifically:
+
+- State the maximum extractable fraction (e.g., "at most 25% of swap fees") rather than implying arbitrary fund drain.
+- Distinguish between `enableFeeAmount`-type actions (adding new fee tiers for future pools — does NOT change existing pool swap fees) and `setFeeProtocol`-type actions (changing the protocol's share of swap fee revenue on existing pools — bounded by pool-side constraints).
+- A capped protocol fee that extracts a fraction of trading revenue is NOT equivalent to the owner draining LP principal. Do not report it as HIGH if the pool-side bounds prevent catastrophic extraction. MEDIUM remains the correct ceiling when the parameter range is constrained and LP principal is not at risk.
+
 **Design-intent comments as evidence:**
 
 Source comments that state architectural assumptions are first-class evidence about intended mitigations. When deciding severity for governance, timelock, or trust-boundary findings, actively scan nearby comments for intent markers such as:
