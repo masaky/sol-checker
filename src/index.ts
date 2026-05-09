@@ -72,8 +72,9 @@ program
             const isCli = provider === "claude-cli";
             let llm: LLMProvider;
             if (isCli) {
-                const configDir = config.llm.claude_cli_config_dir
+                const rawDir = config.llm.claude_cli_config_dir
                     || path.join(os.homedir(), ".claude-ac2");
+                const configDir = rawDir.replace(/^~/, os.homedir());
                 llm = new ClaudeCliProvider(configDir, model);
             } else {
                 const apiKey = resolveApiKey(config.llm.api_key);
@@ -106,7 +107,7 @@ program
                 const verifyModel = options.verifyModel ?? (config.verify.model || model);
                 const verifyProvider = isCli
                     ? new ClaudeCliProvider(
-                        config.llm.claude_cli_config_dir || path.join(os.homedir(), ".claude-ac2"),
+                        (config.llm.claude_cli_config_dir || path.join(os.homedir(), ".claude-ac2")).replace(/^~/, os.homedir()),
                         verifyModel
                     )
                     : new ClaudeProvider(resolveApiKey(config.llm.api_key), verifyModel);
@@ -206,8 +207,8 @@ const scoreCmd = program
 scoreCmd
     .command("update")
     .description("Recalculate score from report files")
-    .requiredOption("--reports <dir>", "Path to reports directory")
-    .requiredOption("--contracts <dir>", "Path to contracts directory")
+    .option("--reports <dir>", "Path to reports directory (optional; used for UNVERIFIED rate)", "")
+    .option("--contracts <dir>", "Path to contracts directory", "")
     .option("--fp <count>", "False positive count from Codex review")
     .option("--fn <count>", "False negative (missed) count from Codex review")
     .option("--total <count>", "Total findings across reviewed reports")
