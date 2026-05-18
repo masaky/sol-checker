@@ -343,6 +343,13 @@ export function verifyByCode(
             return result;
         }
 
+        // Pragma findings: line points at the pragma statement itself, not a
+        // function or declaration. Skip function/declaration correction entirely.
+        const isPragmaFinding = /\bpragma\b/i.test(f.title);
+        if (isPragmaFinding) {
+            return result;
+        }
+
         // Extract function name for deeper checks
         const funcName = extractFunctionName(f.title, f.description);
 
