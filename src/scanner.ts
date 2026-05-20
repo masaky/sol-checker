@@ -19,7 +19,7 @@ export interface ScanTarget {
 export class ScannerError extends Error {
     constructor(
         message: string,
-        public readonly code: "NOT_FOUND" | "INVALID_EXTENSION" | "READ_ERROR"
+        public readonly code: "NOT_FOUND" | "INVALID_EXTENSION" | "READ_ERROR" | "FILE_TOO_LARGE"
     ) {
         super(message);
         this.name = "ScannerError";
@@ -51,7 +51,16 @@ export function readSolFile(filePath: string): ScanTarget {
         throw new ScannerError(`File not found: ${filePath}`, "NOT_FOUND");
     }
 
-    // 3. Read
+    // 3. Size check (1 MB limit)
+    const stat = fs.statSync(resolved);
+    if (stat.size > 1_048_576) {
+        throw new ScannerError(
+            `File too large: ${filePath} (${stat.size} bytes, max 1 MB)`,
+            "FILE_TOO_LARGE"
+        );
+    }
+
+    // 4. Read
     let source: string;
     try {
         source = fs.readFileSync(resolved, "utf-8");

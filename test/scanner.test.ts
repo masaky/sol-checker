@@ -94,6 +94,19 @@ describe("readSolFile", () => {
         expect(target.source).toContain("VulnerableBank");
         expect(target.source.length).toBeGreaterThan(100);
     });
+
+    it("throws FILE_TOO_LARGE for files exceeding 1 MB", () => {
+        const bigContent = "x".repeat(1_048_577);
+        const filePath = writeSolFile(tmpDir, "big.sol", bigContent);
+
+        expect(() => readSolFile(filePath)).toThrow(ScannerError);
+
+        try {
+            readSolFile(filePath);
+        } catch (e) {
+            expect((e as ScannerError).code).toBe("FILE_TOO_LARGE");
+        }
+    });
 });
 
 // ---------------------------------------------------------------------------

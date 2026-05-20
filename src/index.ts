@@ -24,7 +24,7 @@ const program = new Command();
 program
     .name("sol-checker")
     .description("Solidity smart contract vulnerability checker powered by LLM")
-    .version("0.1.0");
+    .version("0.1.1");
 
 // ---------------------------------------------------------------------------
 // scan command
@@ -61,7 +61,7 @@ program
             const quiet = options.format === "json" && !options.output;
             const log = quiet ? console.error : console.log;
 
-            log(chalk.bold("🔍 sol-checker v0.1.0"));
+            log(chalk.bold("🔍 sol-checker v0.1.1"));
             log();
             log(`  File:     ${chalk.cyan(file)}`);
             log(`  Provider: ${chalk.cyan(provider)}`);

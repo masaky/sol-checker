@@ -36,7 +36,7 @@ sol-checker scan ./contracts/MyToken.sol --model claude-sonnet-4-20250514
 ## Output Example
 
 ```
-🔍 sol-checker v0.1.0
+🔍 sol-checker v0.1.1
 
   File:     contracts/MyToken.sol
   Provider: claude

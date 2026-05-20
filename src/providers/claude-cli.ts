@@ -1,4 +1,7 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { LLMProvider, ScanResult } from "./base.js";
 import { ProviderError } from "./base.js";
 import { validateFindings } from "./validate.js";
@@ -6,6 +9,9 @@ import { validateFindings } from "./validate.js";
 // ---------------------------------------------------------------------------
 // ClaudeCliProvider — calls `claude -p` (Claude Code CLI) instead of the SDK.
 // Uses CLAUDE_CONFIG_DIR for OAuth auth, so no ANTHROPIC_API_KEY is needed.
+//
+// Large prompts are written to temp files and passed via --add-dir to avoid
+// spawnSync argument-size / CLI initialization timeouts.
 // ---------------------------------------------------------------------------
 
 export class ClaudeCliProvider implements LLMProvider {
@@ -26,40 +32,58 @@ export class ClaudeCliProvider implements LLMProvider {
     }
 
     private call(system: string, user: string): string {
-        const prompt = `${system}\n\n${user}`;
+        const uid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+        const tmpDir = os.tmpdir();
+        const sysFile  = path.join(tmpDir, `sc-sys-${uid}.md`);
+        const taskFile = path.join(tmpDir, `sc-task-${uid}.md`);
 
-        const result = spawnSync(
-            "claude",
-            [
-                "-p", prompt,
-                "--permission-mode", "bypassPermissions",
-                "--max-budget-usd", String(this.maxBudgetUsd),
-            ],
-            {
-                env: { ...process.env, CLAUDE_CONFIG_DIR: this.claudeConfigDir },
-                maxBuffer: 10 * 1024 * 1024,
-                timeout: 180_000,
-                encoding: "utf-8",
+        try {
+            fs.writeFileSync(sysFile,  system, "utf-8");
+            fs.writeFileSync(taskFile, user,   "utf-8");
+
+            // -p is a tiny instruction; actual content is read from temp files
+            // via --add-dir so the CLI argument stays small.
+            const prompt =
+                `Read ${sysFile} for your system rules, ` +
+                `then read ${taskFile} for the task and complete it exactly as specified.`;
+
+            const result = spawnSync(
+                "claude",
+                [
+                    "-p", prompt,
+                    "--add-dir", tmpDir,
+                    "--permission-mode", "default",
+                    "--output-format", "text",
+                ],
+                {
+                    env: { ...process.env, CLAUDE_CONFIG_DIR: this.claudeConfigDir, ANTHROPIC_API_KEY: undefined },
+                    maxBuffer: 10 * 1024 * 1024,
+                    timeout: 300_000,
+                    encoding: "utf-8",
+                }
+            );
+
+            if (result.error) {
+                throw new ProviderError(
+                    `claude CLI spawn error: ${result.error.message}`,
+                    "API_ERROR",
+                    result.error
+                );
             }
-        );
 
-        if (result.error) {
-            throw new ProviderError(
-                `claude CLI spawn error: ${result.error.message}`,
-                "API_ERROR",
-                result.error
-            );
+            if (result.status !== 0) {
+                const stderr = (result.stderr as string | null) ?? "";
+                throw new ProviderError(
+                    `claude CLI exited with status ${result.status}: ${stderr.slice(0, 500)}`,
+                    "API_ERROR"
+                );
+            }
+
+            return (result.stdout as string).trim();
+        } finally {
+            try { fs.unlinkSync(sysFile);  } catch { /* ignore */ }
+            try { fs.unlinkSync(taskFile); } catch { /* ignore */ }
         }
-
-        if (result.status !== 0) {
-            const stderr = (result.stderr as string | null) ?? "";
-            throw new ProviderError(
-                `claude CLI exited with status ${result.status}: ${stderr.slice(0, 300)}`,
-                "API_ERROR"
-            );
-        }
-
-        return (result.stdout as string).trim();
     }
 
     async scan(system: string, user: string): Promise<ScanResult> {

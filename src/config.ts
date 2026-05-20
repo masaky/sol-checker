@@ -124,6 +124,7 @@ export function initConfig(homeDir?: string): { created: boolean; path: string }
 
     fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(configPath, configToToml(DEFAULT_CONFIG), "utf-8");
+    fs.chmodSync(configPath, 0o600);
 
     return { created: true, path: configPath };
 }

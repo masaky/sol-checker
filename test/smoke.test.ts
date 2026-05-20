@@ -40,7 +40,7 @@ describe("CLI", () => {
 
     it("should show version with --version", () => {
         const output = run("--version");
-        expect(output).toContain("0.1.0");
+        expect(output).toContain("0.1.1");
     });
 
     it("should reject non-.sol files", () => {

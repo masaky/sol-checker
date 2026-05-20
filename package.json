@@ -1,6 +1,6 @@
 {
   "name": "sol-checker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Solidity smart contract vulnerability checker powered by LLM",
   "type": "module",
   "main": "dist/index.js",
