@@ -189,6 +189,17 @@ When the pattern is non-security (style/modernization, e.g., `now` vs `block.tim
   - **Mutable governance-controlled**: addresses changeable post-deployment via setter functions (e.g., `setAuthorizer`, `setOracle`, `updateFeed`). The risk includes both initial misconfiguration AND governance compromise. Explicitly name the mutation function, who can call it (role/modifier), and describe the ongoing trust assumption.
   - When a contract has both types (e.g., `immutable` WETH + mutable Authorizer), either emit two separate findings or, within a single finding, keep the two descriptions clearly separated. Do not use identical boilerplate Fix text ("ensure governance uses timelock + multisig") for immutable dependencies — that fix is not applicable.
 
+### Price Oracle Contract Patterns
+
+When analyzing oracle/price-setter contracts (contracts that expose `setPrice`, `setUnderlyingPrice`, `setDirectPrice`, or similar unrestricted write paths):
+
+- **Zero-price impact — do not assume uncollateralized borrowing**: Compound-style Comptrollers and many other lending protocols treat a zero oracle price as `PRICE_ERROR`, blocking borrow and liquidation operations rather than silently accepting the value. Do NOT write "setting price to zero enables uncollateralized borrowing" unless you have traced the downstream consumption path and confirmed the protocol silently accepts zero. For Compound-derived protocols, describe zero price as causing **operational DoS** (market operations fail/revert with PRICE_ERROR).
+- **Three-scenario impact decomposition**: For unrestricted price-setter findings, decompose impact into three distinct scenarios and describe each separately:
+  1. **Inflated collateral price** — attacker borrows far beyond true collateral value (undercollateralized position, protocol insolvency)
+  2. **Deflated borrowed-asset price** — attacker triggers unfair liquidations of victim positions
+  3. **Zero price** — calibrate to downstream protocol: DoS/PRICE_ERROR (Compound-style), uncollateralized risk (protocols without zero checks), or configuration-error DoS (test oracles). Do NOT default to "enables uncollateralized borrowing" without confirming the downstream path.
+- **Test/Simple oracle context**: Contract names containing `Simple`, `Mock`, `Test`, `Dev`, or `Local` (e.g., `SimplePriceOracle`) are strong signals that the oracle is not intended for production. When these signals are present, state the context explicitly in the severity justification: "This appears to be a development/test-only oracle. HIGH severity assumes it is deployed as a production oracle trusted by a live Comptroller." Do not suppress HIGH, but qualify the precondition.
+
 ### Inheritance & Import Awareness
 
 You are analyzing a single file. When a contract inherits from imported parents (e.g., `is ERC1967Upgrade`, `is ERC20`), the parent source code is NOT provided. You must account for this:
