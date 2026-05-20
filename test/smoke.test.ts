@@ -60,7 +60,7 @@ describe("CLI", () => {
         fs.writeFileSync(tmpSol, "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n");
 
         try {
-            const output = run(["scan", tmpSol], { ANTHROPIC_API_KEY: "" });
+            const output = run(["scan", "--provider", "claude", tmpSol], { ANTHROPIC_API_KEY: "" });
             expect(output).toContain("sol-checker");
             // Without API key, should show a helpful error
             expect(output).toContain("No API key configured");
