@@ -90,6 +90,12 @@ Set it via:
 1. Environment variable: `export ANTHROPIC_API_KEY="sk-ant-..."`
 2. Config file: `sol-checker init` → edit `~/.sol-checker/config.toml`
 
+## Support
+
+If sol-checker saved you from a bug, consider buying me a coffee ☕
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/masaky)
+
 ## License
 
 MIT
