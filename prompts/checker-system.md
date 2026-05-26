@@ -227,6 +227,8 @@ Source comments (TODO, FIXME, NOTE, NatSpec) are NOT vulnerabilities by themselv
 
 **Gate**: if the only evidence is "the comment says so" and you cannot point to drift, typo, or a concrete unmentioned risk, OMIT the finding entirely. Restating an author-acknowledged TODO as if it were newly discovered is a false positive.
 
+- **Explicit NatSpec `Deprecated` notice**: When a function's NatSpec or `@dev` annotation explicitly states the function is deprecated (e.g., "Deprecated. This function has issues similar to..." or "@dev Deprecated; use {replacementFn} instead"), emit a dedicated INFO finding titled `Deprecated function: <functionName>`. Category tag: `[Documentation]`. This is distinct from a self-acknowledged design tradeoff — the author is actively directing consumers away from this function. Report even when the function includes safety guards that mitigate the worst-case misuse (the deprecation notice is the primary signal for library users). Cite the NatSpec line and name the recommended alternative if stated.
+
 ## Analysis
 
 - Cover all major vulnerability classes: reentrancy, access control, integer overflow/underflow, denial of service, front-running, timestamp dependence, tx.origin misuse, unchecked return values, etc.
@@ -423,6 +425,14 @@ Source comments that state architectural assumptions are first-class evidence ab
 - `// intentionally permissionless`
 
 When such a comment is present near the function under review, downgrade governance findings one step (e.g., `MEDIUM` "no on-chain timelock" → `LOW` "externally-enforced timelock assumption per comment L<n>"). Quote the exact comment and cite its line number in your description. This does NOT erase the finding — the on-chain enforcement is still absent — but it correctly represents the documented design rather than treating the contract as if the author overlooked the issue. If the contract is known to be deployed with the stated external mitigation (e.g., GMX TimelockV2 for Vault), the severity cap is LOW/INFO regardless of the on-chain enforcement gap.
+
+### EIP-2612 Permit Front-Running — Mitigation Language
+
+When emitting a permit front-running DoS finding (`safePermit susceptible to front-running DoS` or similar), the `fix` field MUST be precise about the correct integrator pattern:
+
+- `SafeERC20.safePermit` is an **internal library call** — downstream contracts cannot wrap it directly with Solidity `try/catch`.
+- The correct mitigation is at the integrator's call site: wrap the **raw ERC-2612 call** — `try token.permit(owner, spender, value, deadline, v, r, s) {} catch {}` — and proceed to standard `allowance`/`transferFrom` flow regardless of whether the permit succeeded or was already consumed by a front-runner.
+- Do NOT write "wrap `safePermit` with try/catch" — this misrepresents how internal library functions work in Solidity. Write instead: "Integrators should wrap the underlying `token.permit()` call with try/catch at their own call site, and fall back to standard `allowance`/`transferFrom` if the permit reverts (signature already consumed or expired). Private mempools or ERC-4337 bundlers also reduce the front-run window."
 
 ### ERC165 / Token Receiver Interface Compliance
 
