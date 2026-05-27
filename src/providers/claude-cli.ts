@@ -43,9 +43,14 @@ export class ClaudeCliProvider implements LLMProvider {
 
             // -p is a tiny instruction; actual content is read from temp files
             // via --add-dir so the CLI argument stays small.
+            // "SUBAGENT:" prefix triggers the using-superpowers SUBAGENT-STOP guard,
+            // preventing skill-loading preamble from polluting the JSON output.
             const prompt =
-                `Read ${sysFile} for your system rules, ` +
-                `then read ${taskFile} for the task and complete it exactly as specified.`;
+                `SUBAGENT: You are an automated subagent on an isolated scan task. ` +
+                `Per using-superpowers SUBAGENT-STOP: skip all skill loading. ` +
+                `Read ${sysFile} for your role and output format, ` +
+                `then read ${taskFile} for the Solidity source to analyze. ` +
+                `Output ONLY what the rules in ${sysFile} require — no other text.`;
 
             const result = spawnSync(
                 "claude",
@@ -87,9 +92,23 @@ export class ClaudeCliProvider implements LLMProvider {
     }
 
     async scan(system: string, user: string): Promise<ScanResult> {
-        const rawResponse = this.call(system, user);
-        const findings = validateFindings(rawResponse);
-        return { findings, rawResponse, model: this.model, provider: this.name };
+        const MAX_ATTEMPTS = 2;
+        let lastErr: ProviderError | undefined;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                const rawResponse = this.call(system, user);
+                const findings = validateFindings(rawResponse);
+                return { findings, rawResponse, model: this.model, provider: this.name };
+            } catch (err) {
+                if (err instanceof ProviderError && err.code === "INVALID_RESPONSE") {
+                    lastErr = err;
+                    process.stderr.write(`[claude-cli] attempt ${attempt} got non-JSON response, retrying...\n`);
+                } else {
+                    throw err;
+                }
+            }
+        }
+        throw lastErr!;
     }
 
     async rawCall(system: string, user: string): Promise<string> {
