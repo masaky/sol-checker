@@ -56,6 +56,7 @@ export class ClaudeCliProvider implements LLMProvider {
                 "claude",
                 [
                     "-p", prompt,
+                    "--model", this.model,
                     "--add-dir", tmpDir,
                     "--permission-mode", "default",
                     "--output-format", "text",
