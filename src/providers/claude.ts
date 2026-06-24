@@ -7,7 +7,7 @@ import { validateFindings } from "./validate.js";
 // Default model
 // ---------------------------------------------------------------------------
 
-export const CLAUDE_DEFAULT_MODEL = "claude-sonnet-4-20250514";
+export const CLAUDE_DEFAULT_MODEL = "claude-sonnet-4-6";
 
 // ---------------------------------------------------------------------------
 // ClaudeProvider

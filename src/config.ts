@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import toml from "toml";
+import { CLAUDE_DEFAULT_MODEL } from "./providers/claude.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,7 +35,7 @@ export const DEFAULT_CONFIG: SolCheckerConfig = {
     llm: {
         provider: "claude",
         api_key: "",
-        model: "claude-sonnet-4-20250514",
+        model: CLAUDE_DEFAULT_MODEL,
         claude_cli_config_dir: "",
     },
     output: {

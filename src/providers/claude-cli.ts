@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { LLMProvider, ScanResult } from "./base.js";
 import { ProviderError } from "./base.js";
+import { CLAUDE_DEFAULT_MODEL } from "./claude.js";
 import { validateFindings } from "./validate.js";
 
 // ---------------------------------------------------------------------------
@@ -23,7 +24,7 @@ export class ClaudeCliProvider implements LLMProvider {
 
     constructor(
         claudeConfigDir: string,
-        model = "claude-sonnet-4-20250514",
+        model = CLAUDE_DEFAULT_MODEL,
         maxBudgetUsd = 2.0
     ) {
         this.claudeConfigDir = claudeConfigDir;
