@@ -350,6 +350,15 @@ export function verifyByCode(
             return result;
         }
 
+        // Hardcoded literal/constant findings: line points at the literal
+        // itself (init code hash, magic address, magic number), not the
+        // enclosing function's declaration. Skip function/declaration
+        // correction entirely so the LLM's literal-line anchor survives.
+        const isHardcodedLiteralFinding = /\bhardcoded\b/i.test(f.title);
+        if (isHardcodedLiteralFinding) {
+            return result;
+        }
+
         // Extract function name for deeper checks
         const funcName = extractFunctionName(f.title, f.description);
 
