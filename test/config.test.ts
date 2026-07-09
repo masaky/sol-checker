@@ -151,7 +151,7 @@ line_tolerance = 5
             // Verify the file is valid TOML and contains expected values
             const content = fs.readFileSync(result.path, "utf-8");
             expect(content).toContain('provider = "claude"');
-            expect(content).toContain('model = "claude-sonnet-4-6"');
+            expect(content).toContain('model = "claude-sonnet-5"');
         });
 
         it("should not overwrite existing config", () => {

@@ -30,7 +30,7 @@ sol-checker scan ./contracts/MyToken.sol
 sol-checker scan ./contracts/MyToken.sol --output report.md
 
 # Use a specific model
-sol-checker scan ./contracts/MyToken.sol --model claude-sonnet-4-6
+sol-checker scan ./contracts/MyToken.sol --model claude-sonnet-5
 ```
 
 ## Output Example
@@ -40,13 +40,13 @@ sol-checker scan ./contracts/MyToken.sol --model claude-sonnet-4-6
 
   File:     contracts/MyToken.sol
   Provider: claude
-  Model:    claude-sonnet-4-6
+  Model:    claude-sonnet-5
 
 ✔ Scan complete — 3 finding(s)
 
 Sol-Checker Report
 File:     contracts/MyToken.sol
-Provider: claude (claude-sonnet-4-6)
+Provider: claude (claude-sonnet-5)
 
 Summary
   HIGH: 1
@@ -75,7 +75,7 @@ sol-checker init
 [llm]
 provider = "claude"
 api_key = ""          # or use ANTHROPIC_API_KEY env var
-model = "claude-sonnet-4-6"
+model = "claude-sonnet-5"
 
 [output]
 format = "markdown"
