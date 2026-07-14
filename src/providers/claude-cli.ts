@@ -65,7 +65,13 @@ export class ClaudeCliProvider implements LLMProvider {
                 {
                     env: { ...process.env, CLAUDE_CONFIG_DIR: this.claudeConfigDir, ANTHROPIC_API_KEY: undefined },
                     maxBuffer: 10 * 1024 * 1024,
-                    timeout: 300_000,
+                    // A full agentic scan against the ~90KB checker-system rubric
+                    // legitimately runs ~235-260s (6-7 turns of extended thinking),
+                    // sitting right at the old 300s ceiling and intermittently
+                    // tipping over → spawnSync ETIMEDOUT. Give real headroom so
+                    // scans complete instead of being killed and retried (which
+                    // wastes all tokens spent before the kill).
+                    timeout: 600_000,
                     encoding: "utf-8",
                 }
             );
